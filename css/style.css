@@ -1283,6 +1283,7 @@ body {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    padding-top: env(safe-area-inset-top);
     padding-bottom: calc(56px + env(safe-area-inset-bottom));
   }
 
@@ -1647,6 +1648,14 @@ body {
   .due-card-q { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .recent-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .recent-note-item { min-width: 0; }
+
+  /* ── Toast: clear the bottom tab bar + home indicator ── */
+  .toast {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    right: 16px;
+    left: 16px;
+    max-width: 100%;
+  }
 }
 
 /* Mobile back button: hidden on desktop */
