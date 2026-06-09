@@ -81,6 +81,8 @@ const state = {
   fcIdx: 0,
   fcFlipped: false,
   mindmapInstance: null,
+  batchSelect: false,
+  selectedNotes: new Set(),
 };
 
 const voice = new VoiceRecorder();
@@ -238,6 +240,7 @@ function renderNotesView(main) {
           <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 10px 6px;border-bottom:1px solid var(--border)">
             <span style="font-size:11px;color:var(--text-dim)">${notes.length} note${notes.length !== 1 ? 's' : ''}</span>
             <div style="display:flex;gap:4px">
+              <button class="btn btn-ghost btn-sm" id="batch-select-btn" onclick="toggleBatchSelect()" style="font-size:11px;padding:3px 8px;${state.batchSelect ? 'background:rgba(124,58,237,0.25);color:#a78bfa;' : ''}" title="Batch select">☑</button>
               <button class="btn btn-ghost btn-sm" id="collapse-all-btn" onclick="collapseAllNotes(this)" style="font-size:11px;padding:3px 8px" title="Collapse all">⊟</button>
               <button class="btn btn-ghost btn-sm" id="autocat-all-btn" onclick="aiAutoCategorizeAll()" style="font-size:11px;padding:3px 8px" ${!Storage.getSetting('apiKey') ? 'disabled title="Add API key in Settings"' : ''}>✦ Auto-categorize all</button>
             </div>
@@ -245,6 +248,15 @@ function renderNotesView(main) {
           <div class="notes-list" id="notes-list">
             ${renderNotesList(notes)}
           </div>
+          ${state.batchSelect ? `
+          <div class="batch-action-bar">
+            <span style="font-size:13px;color:var(--text-muted)">${state.selectedNotes.size} selected</span>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost btn-sm" onclick="batchSelectAll()">Select all</button>
+              <button class="btn btn-sm" style="background:var(--danger);color:#fff;border-color:var(--danger)" onclick="deleteBatchSelected()" ${state.selectedNotes.size === 0 ? 'disabled' : ''}>Delete</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleBatchSelect()">Cancel</button>
+            </div>
+          </div>` : ''}
         </div>
         <div id="note-editor-pane">
           ${state.editingNoteId
@@ -262,14 +274,20 @@ function renderNotesView(main) {
 
 function renderNoteItem(n, isAtom = false, hasAtoms = false, atomsId = '') {
   const connCount = (n.connections || []).length;
+  const isSelected = state.selectedNotes.has(n.id);
+  const batchClass = state.batchSelect ? 'batch-mode' : '';
+  const selectedClass = isSelected ? 'batch-selected' : '';
+  const clickHandler = state.batchSelect
+    ? `toggleNoteSelect('${n.id}')`
+    : `openNote('${n.id}')`;
   return `
-    <div class="note-list-item ${isAtom ? 'atom-item' : ''} ${state.editingNoteId === n.id ? 'active' : ''}" onclick="openNote('${n.id}')">
-      ${isAtom ? '<span class="atom-tree-line"></span>' : ''}
+    <div class="note-list-item ${isAtom ? 'atom-item' : ''} ${state.editingNoteId === n.id && !state.batchSelect ? 'active' : ''} ${batchClass} ${selectedClass}" onclick="${clickHandler}">
+      ${state.batchSelect ? `<span class="batch-checkbox">${isSelected ? '☑' : '☐'}</span>` : (isAtom ? '<span class="atom-tree-line"></span>' : '')}
       <div style="flex:1;min-width:0">
         <div class="note-list-title" style="display:flex;align-items:center;gap:6px">
-          ${isAtom ? '<span class="atom-dot">⚛</span>' : ''}
+          ${isAtom && !state.batchSelect ? '<span class="atom-dot">⚛</span>' : ''}
           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.title || 'Untitled')}</span>
-          ${hasAtoms ? `<button class="atom-toggle" onclick="event.stopPropagation();toggleAtoms('${atomsId}',this)" title="Collapse atoms">▾</button>` : ''}
+          ${hasAtoms && !state.batchSelect ? `<button class="atom-toggle" onclick="event.stopPropagation();toggleAtoms('${atomsId}',this)" title="Collapse atoms">▾</button>` : ''}
         </div>
         <div class="note-list-preview">${esc((n.content || '').slice(0, 80))}</div>
         <div class="note-list-meta">
@@ -609,6 +627,65 @@ window.confirmDelete = function(id) {
   closeModal();
   toast('Note deleted', 'info');
   navigateTo('notes');
+};
+
+window.toggleBatchSelect = function() {
+  state.batchSelect = !state.batchSelect;
+  state.selectedNotes = new Set();
+  renderNotesView(document.getElementById('main-content'));
+};
+
+window.toggleNoteSelect = function(id) {
+  if (state.selectedNotes.has(id)) state.selectedNotes.delete(id);
+  else state.selectedNotes.add(id);
+  // Re-render only the list + action bar efficiently
+  const list = document.getElementById('notes-list');
+  if (list) list.innerHTML = renderNotesList(Storage.getNotes());
+  // Update action bar count + button state
+  const bar = document.querySelector('.batch-action-bar');
+  if (bar) {
+    bar.querySelector('span').textContent = `${state.selectedNotes.size} selected`;
+    const del = bar.querySelector('button[onclick="deleteBatchSelected()"]');
+    if (del) del.disabled = state.selectedNotes.size === 0;
+  }
+  const btn = document.getElementById('batch-select-btn');
+  if (btn) btn.style.background = state.batchSelect ? 'rgba(124,58,237,0.25)' : '';
+};
+
+window.batchSelectAll = function() {
+  const notes = Storage.getNotes();
+  notes.forEach(n => state.selectedNotes.add(n.id));
+  const list = document.getElementById('notes-list');
+  if (list) list.innerHTML = renderNotesList(notes);
+  const bar = document.querySelector('.batch-action-bar');
+  if (bar) {
+    bar.querySelector('span').textContent = `${state.selectedNotes.size} selected`;
+    const del = bar.querySelector('button[onclick="deleteBatchSelected()"]');
+    if (del) del.disabled = false;
+  }
+};
+
+window.deleteBatchSelected = function() {
+  if (state.selectedNotes.size === 0) return;
+  const count = state.selectedNotes.size;
+  showModal(`
+    <h3>Delete ${count} note${count > 1 ? 's' : ''}?</h3>
+    <p style="color:var(--text-muted);margin-bottom:20px">This cannot be undone.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmBatchDelete()">Delete</button>
+    </div>`);
+};
+
+window.confirmBatchDelete = function() {
+  const count = state.selectedNotes.size;
+  state.selectedNotes.forEach(id => Storage.deleteNote(id));
+  if (state.selectedNotes.has(state.editingNoteId)) state.editingNoteId = null;
+  state.batchSelect = false;
+  state.selectedNotes = new Set();
+  closeModal();
+  renderNotesView(document.getElementById('main-content'));
+  toast(`Deleted ${count} note${count > 1 ? 's' : ''}`, 'info');
 };
 
 window.filterNotes = function(q) {

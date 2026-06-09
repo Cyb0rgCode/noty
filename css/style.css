@@ -1322,9 +1322,17 @@ body {
     height: auto;
   }
 
+  /* Full-bleed list — no floating rectangle */
+  .view:has(.notes-layout) {
+    padding: 0 !important;
+  }
+
   .notes-sidebar {
-    border-radius: 10px;
-    height: calc(100dvh - 120px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    height: calc(100dvh - 56px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 
   /* Hide list when editor is open on mobile */
@@ -1656,6 +1664,31 @@ body {
     left: 16px;
     max-width: 100%;
   }
+}
+
+/* ── Batch select ─────────────────────────────────────────────────────── */
+.batch-checkbox {
+  font-size: 18px;
+  margin-right: 8px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.note-list-item.batch-selected {
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+}
+.note-list-item.batch-selected .batch-checkbox { color: #a78bfa; }
+.note-list-item.batch-mode { cursor: pointer; }
+
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  gap: 8px;
 }
 
 /* Mobile back button: hidden on desktop */
