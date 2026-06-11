@@ -1,5 +1,7 @@
 /**
- * Generates iOS PWA icons — purple rounded rect, white "N" with fusion glow effect.
+ * Generates app icons — aurora mesh gradient background, anti-aliased "N"
+ * with gradient fill, drop shadow, soft glow, and glossy sheen.
+ * Full-bleed square: iOS masks its own corners; the sidebar rounds via CSS.
  */
 const zlib = require('zlib');
 const fs   = require('fs');
@@ -24,26 +26,26 @@ function chunk(type, data) {
   return Buffer.concat([len, typeBytes, data, crcVal]);
 }
 
-// Signed distance from pixel (px,py) to the N glyph — negative = inside
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function lerp(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
+
+// Distance from pixel (px,py) to the N glyph — 0 inside, positive outside
 function distToN(px, py, size) {
-  const pad   = size * 0.21;
-  const thick = size * 0.145;
+  const pad   = size * 0.22;
+  const thick = size * 0.15;
   const top   = pad, bot = size - pad;
   const left  = pad, right = size - pad;
 
-  // Distance to left bar
   const dLeftX = Math.max(left - px, 0, px - (left + thick));
   const dLeftY = Math.max(top  - py, 0, py - bot);
   const dLeft  = Math.sqrt(dLeftX * dLeftX + dLeftY * dLeftY);
 
-  // Distance to right bar
   const dRightX = Math.max((right - thick) - px, 0, px - right);
   const dRightY = Math.max(top - py, 0, py - bot);
   const dRight  = Math.sqrt(dRightX * dRightX + dRightY * dRightY);
 
-  // Distance to diagonal band
-  const t = Math.max(0, Math.min(1, (py - top) / (bot - top)));
-  const xCenter = (left + thick) + (right - thick - (left + thick)) * t;
+  const t = clamp((py - top) / (bot - top), 0, 1);
+  const xCenter = left + (right - thick - left) * t;
   const dDiagX  = Math.max(xCenter - 0.5 - px, 0, px - (xCenter + thick));
   const dDiagY  = Math.max(top - py, 0, py - bot);
   const dDiag   = Math.sqrt(dDiagX * dDiagX + dDiagY * dDiagY);
@@ -51,67 +53,88 @@ function distToN(px, py, size) {
   return Math.min(dLeft, dRight, dDiag);
 }
 
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-function lerp(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
+// Aurora blob: additive radial color contribution
+function blob(x, y, cx, cy, radius, strength) {
+  const d = Math.hypot(x - cx, y - cy) / radius;
+  const f = Math.max(0, 1 - d * d);
+  return f * f * strength;
+}
 
 function makePNG(size) {
   const pixels = new Uint8Array(size * size * 4);
-  const cx = size / 2, cy = size / 2;
-  const radius = size * 0.2;
+  const aa = Math.max(1, size / 180);          // anti-alias width
+  const shadowOff  = size * 0.022;
+  const shadowSoft = size * 0.04;
+  const glowRadius = size * 0.05;
 
-  // Background colour stops (deep purple → indigo)
-  const bg1 = [0x4c, 0x1d, 0x95]; // indigo-900 deep
-  const bg2 = [0x7c, 0x3a, 0xed]; // violet-600
-  const bg3 = [0x6d, 0x28, 0xd9]; // violet-700
+  // Diagonal gradient stops
+  const c0 = [0x1e, 0x1b, 0x4b]; // indigo-950
+  const c1 = [0x7c, 0x3a, 0xed]; // violet-600
+  const c2 = [0xc0, 0x26, 0xd3]; // fuchsia-600
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const idx = (y * size + x) * 4;
 
-      // Rounded corners
-      const rcx = clamp(x, radius, size - radius);
-      const rcy = clamp(y, radius, size - radius);
-      if (Math.hypot(x - rcx, y - rcy) > radius) { pixels[idx+3] = 0; continue; }
-
-      // ── Background: radial energy bloom in upper-left ──────────────
-      // Base vertical gradient bg1→bg3
-      const ty = y / size;
-      let r = lerp(bg1[0], bg3[0], ty);
-      let g = lerp(bg1[1], bg3[1], ty);
-      let b = lerp(bg1[2], bg3[2], ty);
-
-      // Radial bloom: bright violet core offset slightly up-left
-      const bloomX = size * 0.42, bloomY = size * 0.38;
-      const bloomDist = Math.hypot(x - bloomX, y - bloomY) / (size * 0.5);
-      const bloom = Math.max(0, 1 - bloomDist * bloomDist) * 0.55;
-      r = lerp(r, bg2[0] + 60, bloom);
-      g = lerp(g, bg2[1] + 15, bloom);
-      b = lerp(b, bg2[2] + 30, bloom);
-
-      // Diagonal shimmer streak (top-left to bottom-right, narrow band)
-      const streakAxis = (x + y) / (size * 2); // 0..1
-      const streakCenter = 0.52;
-      const streakWidth  = 0.04;
-      const streakT = Math.max(0, 1 - Math.abs(streakAxis - streakCenter) / streakWidth);
-      const shimmer = streakT * streakT * 0.18;
-      r = Math.min(255, r + shimmer * 255);
-      g = Math.min(255, g + shimmer * 200);
-      b = Math.min(255, b + shimmer * 255);
-
-      // ── N glyph with soft glow halo ────────────────────────────────
-      const dist = distToN(x, y, size);
-
-      if (dist === 0) {
-        // Solid white core
-        r = 255; g = 255; b = 255;
+      // ── Base: diagonal three-stop gradient ────────────────────────
+      const td = (x + y) / (2 * size);
+      let r, g, b;
+      if (td < 0.5) {
+        r = lerp(c0[0], c1[0], td * 2);
+        g = lerp(c0[1], c1[1], td * 2);
+        b = lerp(c0[2], c1[2], td * 2);
       } else {
-        // Glow: exponential falloff, violet-white tint
-        const glowRadius = size * 0.045;
-        const glow = Math.max(0, 1 - dist / glowRadius);
-        const glowIntensity = glow * glow * 0.85;
-        r = Math.min(255, r + glowIntensity * (255 - r) + glowIntensity * 40);
-        g = Math.min(255, g + glowIntensity * (200 - g));
-        b = Math.min(255, b + glowIntensity * (255 - b));
+        r = lerp(c1[0], c2[0], (td - 0.5) * 2);
+        g = lerp(c1[1], c2[1], (td - 0.5) * 2);
+        b = lerp(c1[2], c2[2], (td - 0.5) * 2);
+      }
+
+      // ── Aurora blobs (mesh-gradient feel) ──────────────────────────
+      const b1 = blob(x, y, size * 0.78, size * 0.15, size * 0.60, 0.50); // lavender, upper-right
+      r = lerp(r, 0xa7, b1); g = lerp(g, 0x8b, b1); b = lerp(b, 0xfa, b1);
+
+      const b2 = blob(x, y, size * 0.12, size * 0.88, size * 0.65, 0.40); // indigo, lower-left
+      r = lerp(r, 0x4f, b2); g = lerp(g, 0x46, b2); b = lerp(b, 0xe5, b2);
+
+      const b3 = blob(x, y, size * 0.88, size * 0.92, size * 0.55, 0.35); // pink, lower-right
+      r = lerp(r, 0xe8, b3); g = lerp(g, 0x79, b3); b = lerp(b, 0xf9, b3);
+
+      // ── Vignette: darken corners for depth ─────────────────────────
+      const vd = Math.hypot(x - size / 2, y - size / 2) / (size * 0.72);
+      const vig = 1 - clamp(vd * vd, 0, 1) * 0.22;
+      r *= vig; g *= vig; b *= vig;
+
+      // ── Glossy sheen on top half ───────────────────────────────────
+      if (y < size * 0.45) {
+        const sheen = Math.pow(1 - y / (size * 0.45), 2) * 0.07;
+        r += sheen * 255; g += sheen * 255; b += sheen * 255;
+      }
+
+      // ── Drop shadow under glyph (offset down-right) ────────────────
+      const sDist = distToN(x - shadowOff, y - shadowOff, size);
+      const sCov  = clamp(1 - sDist / shadowSoft, 0, 1);
+      const shade = 1 - sCov * sCov * 0.45;
+      r *= shade; g *= shade; b *= shade;
+
+      // ── Soft glow halo around glyph ────────────────────────────────
+      const dist = distToN(x, y, size);
+      if (dist > 0 && dist < glowRadius) {
+        const glow = Math.pow(1 - dist / glowRadius, 2) * 0.5;
+        r = lerp(r, 255, glow * 0.6);
+        g = lerp(g, 230, glow * 0.5);
+        b = lerp(b, 255, glow * 0.7);
+      }
+
+      // ── Glyph: anti-aliased, vertical gradient white → lavender ────
+      const cov = clamp(1 - dist / aa, 0, 1);
+      if (cov > 0) {
+        const gy = clamp((y - size * 0.22) / (size * 0.56), 0, 1);
+        const gr = lerp(255, 0xdd, gy);
+        const gg = lerp(255, 0xd6, gy);
+        const gb = lerp(255, 0xfe, gy);
+        r = lerp(r, gr, cov);
+        g = lerp(g, gg, cov);
+        b = lerp(b, gb, cov);
       }
 
       pixels[idx]   = Math.round(clamp(r, 0, 255));
@@ -121,7 +144,6 @@ function makePNG(size) {
     }
   }
 
-  // Build PNG
   const rawRows = [];
   for (let y = 0; y < size; y++) {
     rawRows.push(0);
