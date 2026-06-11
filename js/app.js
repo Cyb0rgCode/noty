@@ -3,6 +3,7 @@ import { AI, KNOWN_LIMITS, getTodayUsage, getExhaustedToday } from './ai.js';
 import { VoiceRecorder } from './voice.js';
 import { sm2Update, getDueCards } from './sm2.js';
 import { MindMap } from './mindmap.js';
+import { tgBackup, tgRestore, tgDetectChatId, tgConfigured, initTgAutoSync } from './telegram.js';
 
 // ── Mobile helpers ────────────────────────────────────────────────────
 const isMobile = () => window.innerWidth <= 640;
@@ -1582,6 +1583,67 @@ function renderSettingsView() {
       </div>
 
       <div class="settings-section">
+        <h3>Telegram Sync</h3>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+          Free cloud backup to your own Telegram bot. Notes auto-save to your private chat;
+          restore them on any device.
+          <a href="#" style="color:var(--accent)" onclick="tgShowHelp();return false">Setup guide</a>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Bot token</div>
+            <div class="setting-desc">From @BotFather — stored only in this browser</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <input class="setting-input" id="tg-token-input" type="password"
+            value="${esc(Storage.getSetting('tgToken'))}" placeholder="123456789:AA…" style="flex:1">
+        </div>
+
+        <div class="setting-row" style="border-bottom:none">
+          <div>
+            <div class="setting-label">Chat ID</div>
+            <div class="setting-desc">Send /start to your bot, then click Detect</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input class="setting-input" id="tg-chat-input"
+            value="${esc(Storage.getSetting('tgChatId'))}" placeholder="123456789" style="flex:1">
+          <button class="btn btn-ghost" onclick="tgDetect()">Detect</button>
+          <button class="btn btn-primary" onclick="saveTgConfig()">Save</button>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Auto-backup</div>
+            <div class="setting-desc">Sends a backup ~8s after any note change</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="tg-auto-toggle"
+              ${Storage.getSetting('tgAutoSync','false') === 'true' ? 'checked' : ''}
+              onchange="toggleTgAuto(this.checked)">
+            <span style="font-size:13px;color:var(--text-muted)">Enabled</span>
+          </label>
+        </div>
+
+        <div class="setting-row" style="border-bottom:none">
+          <div>
+            <div class="setting-label">Manual sync</div>
+            <div class="setting-desc" id="tg-status">${
+              Storage.getSetting('tgLastBackupAt')
+                ? '✓ Last backup: ' + new Date(Storage.getSetting('tgLastBackupAt')).toLocaleString()
+                : tgConfigured() ? 'No backup yet' : 'Not configured'
+            }</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-success btn-sm" onclick="tgBackupNow()">↑ Backup now</button>
+            <button class="btn btn-ghost btn-sm" onclick="tgRestoreNow()">↓ Restore</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3>Data</h3>
         <div class="setting-row">
           <div>
@@ -1647,6 +1709,111 @@ window.saveLang = function(lang) {
   if (voice.rec) voice.rec.lang = lang;
   toast('Language saved', 'success');
 };
+
+// ── Telegram sync ──────────────────────────────────────────────────────
+window.tgShowHelp = function() {
+  showModal(`
+    <h3>Telegram Sync setup</h3>
+    <ol style="color:var(--text-muted);font-size:14px;line-height:1.9;padding-left:20px;margin-bottom:16px">
+      <li>Open Telegram, search <strong style="color:var(--text)">@BotFather</strong></li>
+      <li>Send <code>/newbot</code> and follow the steps — you get a <strong style="color:var(--text)">bot token</strong></li>
+      <li>Paste the token here in Settings</li>
+      <li>Open your new bot in Telegram and send it <code>/start</code></li>
+      <li>Click <strong style="color:var(--text)">Detect</strong> to fill in your chat ID, then <strong style="color:var(--text)">Save</strong></li>
+      <li>Turn on <strong style="color:var(--text)">Auto-backup</strong> — done</li>
+    </ol>
+    <p style="color:var(--text-dim);font-size:12px;line-height:1.6;margin-bottom:16px">
+      Backups are JSON files sent to your private chat with the bot and pinned.
+      To restore on a new device: enter the same token + chat ID and click Restore.
+      Keep the token private — anyone who has it can read your backups.
+    </p>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="closeModal()">Got it</button>
+    </div>
+  `);
+};
+
+window.saveTgConfig = function() {
+  const token = document.getElementById('tg-token-input')?.value?.trim() || '';
+  const chatId = document.getElementById('tg-chat-input')?.value?.trim() || '';
+  Storage.setSetting('tgToken', token);
+  Storage.setSetting('tgChatId', chatId);
+  toast(token && chatId ? 'Telegram sync configured' : 'Telegram settings saved', 'success');
+  renderView();
+};
+
+window.tgDetect = async function() {
+  const token = document.getElementById('tg-token-input')?.value?.trim();
+  if (!token) { toast('Paste your bot token first', 'error'); return; }
+  Storage.setSetting('tgToken', token);
+  toast('Detecting chat ID…', 'info');
+  try {
+    const id = await tgDetectChatId();
+    document.getElementById('tg-chat-input').value = id;
+    Storage.setSetting('tgChatId', String(id));
+    toast('Chat ID detected — sync ready', 'success');
+    renderView();
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+  }
+};
+
+window.toggleTgAuto = function(on) {
+  Storage.setSetting('tgAutoSync', on ? 'true' : 'false');
+  if (on && !tgConfigured()) {
+    toast('Set bot token + chat ID first', 'error');
+    return;
+  }
+  toast(on ? 'Auto-backup on' : 'Auto-backup off', 'info');
+};
+
+window.tgBackupNow = async function() {
+  if (!tgConfigured()) { toast('Set bot token + chat ID first', 'error'); return; }
+  toast('Backing up to Telegram…', 'info');
+  try {
+    const n = await tgBackup();
+    toast(`✓ Backed up ${n} notes to Telegram`, 'success');
+    renderView();
+  } catch (err) {
+    toast('Backup failed: ' + err.message, 'error', 5000);
+  }
+};
+
+window.tgRestoreNow = function() {
+  if (!tgConfigured()) { toast('Set bot token + chat ID first', 'error'); return; }
+  showModal(`
+    <h3>Restore from Telegram?</h3>
+    <p style="color:var(--text-muted);margin-bottom:20px">
+      This replaces all notes on this device with the latest Telegram backup.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmTgRestore()">Restore</button>
+    </div>
+  `);
+};
+
+window.confirmTgRestore = async function() {
+  closeModal();
+  toast('Restoring from Telegram…', 'info');
+  try {
+    const { notes, savedAt } = await tgRestore();
+    toast(`✓ Restored ${notes} notes (backup from ${new Date(savedAt).toLocaleString()})`, 'success', 5000);
+    navigateTo('dashboard');
+  } catch (err) {
+    toast('Restore failed: ' + err.message, 'error', 5000);
+  }
+};
+
+document.addEventListener('tg:backup-done', (e) => {
+  toast(`✓ Auto-backed up ${e.detail} notes to Telegram`, 'success');
+  const status = document.getElementById('tg-status');
+  if (status) status.textContent = '✓ Last backup: ' + new Date().toLocaleString();
+});
+
+document.addEventListener('tg:backup-fail', (e) => {
+  toast('Telegram auto-backup failed: ' + e.detail, 'error', 5000);
+});
 
 window.exportData = function() {
   const data = { notes: Storage.getNotes(), exportedAt: new Date().toISOString() };
@@ -1908,4 +2075,5 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+initTgAutoSync();
 navigateTo('dashboard');

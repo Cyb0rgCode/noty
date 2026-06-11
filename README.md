@@ -11,6 +11,7 @@ A smart note-taking app with AI features powered by Google Gemini. Works entirel
 - **AI Summarize / Atomize** — summarize notes or break them into atomic concepts
 - **Voice Input** — speech-to-text transcription
 - **Auto-switch** — falls back to next Gemini model automatically on rate-limit
+- **Telegram Sync** — free cloud backup via your own Telegram bot: notes auto-save to your private chat and restore on any device (Settings → Telegram Sync → Setup guide)
 
 ## Setup
 
