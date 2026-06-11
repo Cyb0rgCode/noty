@@ -67,10 +67,10 @@ function makePNG(size) {
   const shadowSoft = size * 0.04;
   const glowRadius = size * 0.05;
 
-  // Diagonal gradient stops
-  const c0 = [0x1e, 0x1b, 0x4b]; // indigo-950
-  const c1 = [0x7c, 0x3a, 0xed]; // violet-600
-  const c2 = [0xc0, 0x26, 0xd3]; // fuchsia-600
+  // Diagonal gradient stops — monochrome
+  const c0 = [0x08, 0x08, 0x08]; // near black
+  const c1 = [0x26, 0x26, 0x26]; // dark gray
+  const c2 = [0x3c, 0x3c, 0x3c]; // mid gray
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -89,15 +89,15 @@ function makePNG(size) {
         b = lerp(c1[2], c2[2], (td - 0.5) * 2);
       }
 
-      // ── Aurora blobs (mesh-gradient feel) ──────────────────────────
-      const b1 = blob(x, y, size * 0.78, size * 0.15, size * 0.60, 0.50); // lavender, upper-right
-      r = lerp(r, 0xa7, b1); g = lerp(g, 0x8b, b1); b = lerp(b, 0xfa, b1);
+      // ── Aurora blobs (mesh-gradient feel) — grayscale ──────────────
+      const b1 = blob(x, y, size * 0.78, size * 0.15, size * 0.60, 0.50); // light gray, upper-right
+      r = lerp(r, 0x6e, b1); g = lerp(g, 0x6e, b1); b = lerp(b, 0x6e, b1);
 
-      const b2 = blob(x, y, size * 0.12, size * 0.88, size * 0.65, 0.40); // indigo, lower-left
-      r = lerp(r, 0x4f, b2); g = lerp(g, 0x46, b2); b = lerp(b, 0xe5, b2);
+      const b2 = blob(x, y, size * 0.12, size * 0.88, size * 0.65, 0.40); // soft gray, lower-left
+      r = lerp(r, 0x4a, b2); g = lerp(g, 0x4a, b2); b = lerp(b, 0x4a, b2);
 
-      const b3 = blob(x, y, size * 0.88, size * 0.92, size * 0.55, 0.35); // pink, lower-right
-      r = lerp(r, 0xe8, b3); g = lerp(g, 0x79, b3); b = lerp(b, 0xf9, b3);
+      const b3 = blob(x, y, size * 0.88, size * 0.92, size * 0.55, 0.35); // pale gray, lower-right
+      r = lerp(r, 0x80, b3); g = lerp(g, 0x80, b3); b = lerp(b, 0x80, b3);
 
       // ── Vignette: darken corners for depth ─────────────────────────
       const vd = Math.hypot(x - size / 2, y - size / 2) / (size * 0.72);
@@ -121,17 +121,17 @@ function makePNG(size) {
       if (dist > 0 && dist < glowRadius) {
         const glow = Math.pow(1 - dist / glowRadius, 2) * 0.5;
         r = lerp(r, 255, glow * 0.6);
-        g = lerp(g, 230, glow * 0.5);
-        b = lerp(b, 255, glow * 0.7);
+        g = lerp(g, 255, glow * 0.6);
+        b = lerp(b, 255, glow * 0.6);
       }
 
-      // ── Glyph: anti-aliased, vertical gradient white → lavender ────
+      // ── Glyph: anti-aliased, vertical gradient white → light gray ──
       const cov = clamp(1 - dist / aa, 0, 1);
       if (cov > 0) {
         const gy = clamp((y - size * 0.22) / (size * 0.56), 0, 1);
-        const gr = lerp(255, 0xdd, gy);
-        const gg = lerp(255, 0xd6, gy);
-        const gb = lerp(255, 0xfe, gy);
+        const gr = lerp(255, 0xd4, gy);
+        const gg = lerp(255, 0xd4, gy);
+        const gb = lerp(255, 0xd4, gy);
         r = lerp(r, gr, cov);
         g = lerp(g, gg, cov);
         b = lerp(b, gb, cov);
