@@ -1820,3 +1820,48 @@ body {
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ACCENT COLORS — nav icons, stat cards, dashboard dots, AI btns
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Nav icon per-section colors ─────────────────────────────── */
+.nav-item[data-view="dashboard"] .nav-icon  { color: #60a5fa; }
+.nav-item[data-view="notes"]      .nav-icon  { color: #a78bfa; }
+.nav-item[data-view="flashcards"] .nav-icon  { color: #fbbf24; }
+.nav-item[data-view="quiz"]       .nav-icon  { color: #34d399; }
+.nav-item[data-view="mindmap"]    .nav-icon  { color: #f472b6; }
+.nav-item[data-view="settings"]   .nav-icon  { color: #94a3b8; }
+
+/* ── Dashboard stat card colored shimmers ────────────────────── */
+.stat-card:nth-child(1)::before       { background: linear-gradient(90deg, transparent, #60a5fa, transparent); opacity: 0.5; }
+.stat-card:nth-child(1):hover::before { opacity: 1; }
+.stat-card:nth-child(2)::before       { background: linear-gradient(90deg, transparent, #fbbf24, transparent); opacity: 0.5; }
+.stat-card:nth-child(2):hover::before { opacity: 1; }
+.stat-card:nth-child(3)::before       { background: linear-gradient(90deg, transparent, #f87171, transparent); opacity: 0.5; }
+.stat-card:nth-child(3):hover::before { opacity: 1; }
+.stat-card:nth-child(4)::before       { background: linear-gradient(90deg, transparent, #fb923c, transparent); opacity: 0.5; }
+.stat-card:nth-child(4):hover::before { opacity: 1; }
+
+/* ── Dashboard stat number colors ────────────────────────────── */
+.stat-card:nth-child(1) .stat-num { color: #60a5fa; }
+.stat-card:nth-child(2) .stat-num { color: #fbbf24; }
+.stat-card:nth-child(3) .stat-num { color: #f87171; }
+.stat-card:nth-child(4) .stat-num { color: #fb923c; }
+
+/* ── Recent-notes colored dot cycle ──────────────────────────── */
+.recent-note-item:nth-child(1) .recent-note-dot { background: #60a5fa; }
+.recent-note-item:nth-child(2) .recent-note-dot { background: #a78bfa; }
+.recent-note-item:nth-child(3) .recent-note-dot { background: #34d399; }
+.recent-note-item:nth-child(4) .recent-note-dot { background: #fbbf24; }
+.recent-note-item:nth-child(5) .recent-note-dot { background: #f472b6; }
+
+/* ── AI action button color tints ────────────────────────────── */
+.btn-ghost.btn-ai-sum   { color: #c084fc; }
+.btn-ghost.btn-ai-atom  { color: #67e8f9; }
+.btn-ghost.btn-ai-flash { color: #fbbf24; }
+.btn-ghost.btn-ai-quiz  { color: #6ee7b7; }
+.btn-ghost.btn-ai-sum:hover   { background: rgba(192, 132, 252, 0.12); border-color: rgba(192, 132, 252, 0.3); }
+.btn-ghost.btn-ai-atom:hover  { background: rgba(103, 232, 249, 0.12); border-color: rgba(103, 232, 249, 0.3); }
+.btn-ghost.btn-ai-flash:hover { background: rgba(251, 191, 36,  0.12); border-color: rgba(251, 191, 36,  0.3); }
+.btn-ghost.btn-ai-quiz:hover  { background: rgba(110, 231, 183, 0.12); border-color: rgba(110, 231, 183, 0.3); }

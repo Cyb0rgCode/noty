@@ -451,16 +451,16 @@ function renderNoteEditor(note) {
         </button>
 
         <div class="ai-actions">
-          <button class="btn btn-ghost btn-sm" onclick="aiSummarize('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''}>
+          <button class="btn btn-ghost btn-sm btn-ai-sum" onclick="aiSummarize('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''}>
             ✦ Summarize
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="aiAtomize('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''} title="Break into atomic notes">
+          <button class="btn btn-ghost btn-sm btn-ai-atom" onclick="aiAtomize('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''} title="Break into atomic notes">
             ⚛ Atomize
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="aiFlashcards('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''}>
+          <button class="btn btn-ghost btn-sm btn-ai-flash" onclick="aiFlashcards('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''}>
             ⚡ Flashcards
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="aiQuiz('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''}>
+          <button class="btn btn-ghost btn-sm btn-ai-quiz" onclick="aiQuiz('${note.id}')" ${!hasApiKey ? 'disabled title="Add API key in Settings"' : ''}>
             ? Quiz
           </button>
         </div>
