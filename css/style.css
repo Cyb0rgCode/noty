@@ -1,5 +1,6 @@
 :root {
   /* Monochrome dark — matches the app icon (white N on black) */
+  color-scheme: dark;
   --bg: #0d0d0d;
   --sidebar-bg: #111111;
   --panel: #171717;
@@ -28,6 +29,7 @@
 
 [data-theme="light"] {
   /* Monochrome light — black N on white */
+  color-scheme: light;
   --bg: #f5f5f5;
   --sidebar-bg: #fbfbfb;
   --panel: #ffffff;
