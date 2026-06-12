@@ -154,13 +154,20 @@ export class MindMap {
     const svg = this.svg;
     svg.innerHTML = '';
 
+    // Resolve theme colors (SVG presentation attributes can't use var())
+    const css = getComputedStyle(document.documentElement);
+    const cAccent = css.getPropertyValue('--accent').trim() || '#fff';
+    const cPanel  = css.getPropertyValue('--panel').trim() || '#171717';
+    const cText   = css.getPropertyValue('--text').trim() || '#ececec';
+    const cMuted  = css.getPropertyValue('--text-muted').trim() || '#9b9b9b';
+
     // Defs
     const defs = this._el('defs');
     const marker = this._el('marker', {
       id: 'arrow', markerWidth: '8', markerHeight: '8',
       refX: '28', refY: '4', orient: 'auto',
     });
-    const path = this._el('path', { d: 'M0,0 L0,8 L8,4 z', fill: '#7c3aed', opacity: '0.5' });
+    const path = this._el('path', { d: 'M0,0 L0,8 L8,4 z', fill: cAccent, opacity: '0.5' });
     marker.appendChild(path);
     defs.appendChild(marker);
     svg.appendChild(defs);
@@ -176,7 +183,7 @@ export class MindMap {
 
       const line = this._el('line', {
         x1: a.x, y1: a.y, x2: b.x, y2: b.y,
-        stroke: '#7c3aed', 'stroke-opacity': '0.35',
+        stroke: cAccent, 'stroke-opacity': '0.35',
         'stroke-width': '1.5', 'marker-end': 'url(#arrow)',
       });
       root.appendChild(line);
@@ -185,7 +192,7 @@ export class MindMap {
         const mx = (a.x + b.x) / 2;
         const my = (a.y + b.y) / 2;
         const txt = this._el('text', {
-          x: mx, y: my, fill: '#94a3b8',
+          x: mx, y: my, fill: cMuted,
           'font-size': '11', 'text-anchor': 'middle',
           'dominant-baseline': 'middle',
         });
@@ -204,12 +211,12 @@ export class MindMap {
       });
 
       const circle = this._el('circle', {
-        r, fill: '#1a1a35', stroke: '#7c3aed',
+        r, fill: cPanel, stroke: cAccent,
         'stroke-width': '2', 'stroke-opacity': '0.7',
       });
 
       const label = this._el('text', {
-        y: r + 14, fill: '#e2e8f0', 'font-size': '12',
+        y: r + 14, fill: cText, 'font-size': '12',
         'text-anchor': 'middle', 'dominant-baseline': 'middle',
       });
       label.textContent = node.label.length > 18
@@ -220,7 +227,7 @@ export class MindMap {
         node.tags.slice(0, 3).forEach((_, i) => {
           const dot = this._el('circle', {
             cx: -8 + i * 8, cy: r - 6, r: '4',
-            fill: '#7c3aed', opacity: '0.8',
+            fill: cAccent, opacity: '0.8',
           });
           g.appendChild(dot);
         });

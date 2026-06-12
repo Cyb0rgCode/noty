@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Noty">
-  <meta name="theme-color" content="#0d0d1a">
+  <meta name="theme-color" content="#0d0d0d">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
   <link rel="apple-touch-icon" sizes="167x167" href="icon-167.png">
@@ -63,14 +63,28 @@
   </div>
 
   <script>
-    // Swap sidebar logo immediately (before module load) to avoid flash
+    // Theme init — runs before the module loads to avoid flash.
+    // Theme setting: 'dark' (default) | 'light' | 'system'.
     (function() {
-      const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const img  = document.getElementById('logo-img');
-      if (img) img.src = dark ? 'icon-dark-120.png' : 'icon-120.png';
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-        const el = document.getElementById('logo-img');
-        if (el) el.src = e.matches ? 'icon-dark-120.png' : 'icon-120.png';
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function stored() {
+        try { return JSON.parse(localStorage.getItem('noty_settings') || '{}').theme || 'dark'; }
+        catch { return 'dark'; }
+      }
+
+      window.__applyTheme = function(pref) {
+        const resolved = pref === 'system' ? (mq.matches ? 'dark' : 'light') : pref;
+        document.documentElement.dataset.theme = resolved;
+        const img = document.getElementById('logo-img');
+        if (img) img.src = resolved === 'dark' ? 'icon-dark-120.png' : 'icon-120.png';
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = resolved === 'dark' ? '#0d0d0d' : '#f5f5f5';
+      };
+
+      window.__applyTheme(stored());
+      mq.addEventListener('change', () => {
+        if (stored() === 'system') window.__applyTheme('system');
       });
     })();
   </script>

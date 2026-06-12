@@ -185,11 +185,11 @@ function renderDashboard() {
           <div class="stat-label">Flashcards</div>
         </div>
         <div class="stat-card">
-          <div class="stat-num" style="color:var(--warning)">${due.length}</div>
+          <div class="stat-num">${due.length}</div>
           <div class="stat-label">Due for review</div>
         </div>
         <div class="stat-card">
-          <div class="stat-num" style="color:var(--success)">${streak()}</div>
+          <div class="stat-num">${streak()}</div>
           <div class="stat-label">Day streak 🔥</div>
         </div>
       </div>
@@ -241,7 +241,7 @@ function renderNotesView(main) {
           <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 10px 6px;border-bottom:1px solid var(--border)">
             <span style="font-size:11px;color:var(--text-dim)">${notes.length} note${notes.length !== 1 ? 's' : ''}</span>
             <div style="display:flex;gap:4px">
-              <button class="btn btn-ghost btn-sm" id="batch-select-btn" onclick="toggleBatchSelect()" style="font-size:11px;padding:3px 8px;${state.batchSelect ? 'background:rgba(124,58,237,0.25);color:#a78bfa;' : ''}" title="Batch select">☑</button>
+              <button class="btn btn-ghost btn-sm" id="batch-select-btn" onclick="toggleBatchSelect()" style="font-size:11px;padding:3px 8px;${state.batchSelect ? 'background:rgba(var(--accent-rgb),0.25);color:var(--accent-text);' : ''}" title="Batch select">☑</button>
               <button class="btn btn-ghost btn-sm" id="collapse-all-btn" onclick="collapseAllNotes(this)" style="font-size:11px;padding:3px 8px" title="Collapse all">⊟</button>
               <button class="btn btn-ghost btn-sm" id="autocat-all-btn" onclick="aiAutoCategorizeAll()" style="font-size:11px;padding:3px 8px" ${!Storage.getSetting('apiKey') ? 'disabled title="Add API key in Settings"' : ''}>✦ Auto-categorize all</button>
             </div>
@@ -650,7 +650,7 @@ window.toggleNoteSelect = function(id) {
     if (del) del.disabled = state.selectedNotes.size === 0;
   }
   const btn = document.getElementById('batch-select-btn');
-  if (btn) btn.style.background = state.batchSelect ? 'rgba(124,58,237,0.25)' : '';
+  if (btn) btn.style.background = state.batchSelect ? 'rgba(var(--accent-rgb),0.25)' : '';
 };
 
 window.batchSelectAll = function() {
@@ -724,7 +724,7 @@ window.toggleVoice = function() {
   if (!interimEl) {
     interimEl = document.createElement('div');
     interimEl.id = 'voice-interim';
-    interimEl.style.cssText = 'padding:6px 20px;font-size:13px;color:#94a3b8;font-style:italic;min-height:24px;background:rgba(124,58,237,0.05)';
+    interimEl.style.cssText = 'padding:6px 20px;font-size:13px;color:#94a3b8;font-style:italic;min-height:24px;background:rgba(var(--accent-rgb),0.05)';
     textarea.parentElement.appendChild(interimEl);
   }
 
@@ -776,7 +776,7 @@ window.aiRename = async function(id) {
     const titleInput = document.getElementById('note-title');
     if (titleInput) {
       titleInput.value = title;
-      titleInput.animate([{ background: 'rgba(124,58,237,0.3)' }, { background: 'transparent' }], { duration: 800 });
+      titleInput.animate([{ background: 'rgba(var(--accent-rgb),0.3)' }, { background: 'transparent' }], { duration: 800 });
     }
     // Refresh notes list
     const listEl = document.getElementById('notes-list');
@@ -1402,7 +1402,7 @@ function renderModelTableRows() {
     }
 
     return `
-      <tr style="border-bottom:1px solid var(--border);${isActive ? 'background:rgba(124,58,237,0.08)' : ''}${isNone || isExhausted ? 'opacity:0.55' : ''}">
+      <tr style="border-bottom:1px solid var(--border);${isActive ? 'background:rgba(var(--accent-rgb),0.08)' : ''}${isNone || isExhausted ? 'opacity:0.55' : ''}">
         <td style="padding:7px 8px">
           <span style="font-weight:${isActive ? '600' : '400'};color:${isActive ? 'var(--accent)' : 'var(--text)'}">
             ${isActive ? '▶ ' : ''}${esc(info.label)}
@@ -1458,6 +1458,21 @@ function renderSettingsView() {
     <div class="view" style="max-width:680px">
       <div class="view-header">
         <div class="view-title">Settings</div>
+      </div>
+
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Theme</div>
+            <div class="setting-desc">Monochrome — matches the app icon</div>
+          </div>
+          <select class="fc-source-select" onchange="setTheme(this.value)">
+            <option value="dark"   ${Storage.getSetting('theme','dark') === 'dark'   ? 'selected' : ''}>Dark</option>
+            <option value="light"  ${Storage.getSetting('theme','dark') === 'light'  ? 'selected' : ''}>Light</option>
+            <option value="system" ${Storage.getSetting('theme','dark') === 'system' ? 'selected' : ''}>System</option>
+          </select>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -1694,6 +1709,14 @@ function renderSettingsView() {
 }
 
 function bindSettings() {}
+
+window.setTheme = function(v) {
+  Storage.setSetting('theme', v);
+  window.__applyTheme?.(v);
+  toast(`Theme: ${v}`, 'info');
+  // Re-render so the mind map and other canvas-resolved colors update
+  renderView();
+};
 
 window.saveApiKey = function() {
   const val = document.getElementById('api-key-input')?.value?.trim();
