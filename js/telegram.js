@@ -1,15 +1,23 @@
 // ── Telegram Bot Sync ────────────────────────────────────────────────────
-// Free cloud backup using the user's own Telegram bot. The Bot API allows
-// CORS requests from browsers, so a static site can call it directly.
+// Free cloud backup using the user's own Telegram bot. The Bot API method
+// endpoints allow CORS requests from browsers, so a static site can call
+// them directly. The file-download endpoint does NOT send CORS headers,
+// so backups are stored as TEXT messages instead of documents:
 //
-// Backup:  data JSON → sendDocument to the user's private chat → pin it.
-// Restore: getChat → pinned_message.document → getFile → download → import.
-// The pinned message is the source of truth, so a brand-new device only
-// needs the bot token + chat id to pull the latest backup.
+// Backup:  data JSON → base64 → ≤3800-char chunks → sendMessage each →
+//          send an index message listing the chunk ids → pin the index.
+// Restore: getChat → pinned index → forwardMessage each chunk to the same
+//          chat (the response contains the text) → delete the forwarded
+//          copies → reassemble → import.
+//
+// Every step is a Bot API method call, so the whole flow is CORS-safe.
 
 import { Storage } from './storage.js';
 
 const API = 'https://api.telegram.org';
+const IDX_PREFIX = 'NOTY_INDEX::';
+const CHUNK_PREFIX = 'NOTY_DATA::';
+const CHUNK_SIZE = 3800; // Telegram message limit is 4096 chars
 
 function cfg() {
   return {
@@ -25,14 +33,37 @@ export function tgConfigured() {
 
 async function tgCall(method, params) {
   const { token } = cfg();
-  const res = await fetch(`${API}/bot${token}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params || {}),
-  });
+  let res;
+  try {
+    res = await fetch(`${API}/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params || {}),
+    });
+  } catch {
+    throw new Error('Network error — check your connection');
+  }
   const data = await res.json().catch(() => ({ ok: false, description: 'Bad response' }));
   if (!data.ok) throw new Error(data.description || `${method} failed`);
   return data.result;
+}
+
+// Unicode-safe base64 — Telegram trims whitespace at message edges, so the
+// payload must never start or end a chunk with trimmable characters.
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+function b64decode(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
 }
 
 // Verifies the token and returns bot info (also used as a connection test)
@@ -51,46 +82,72 @@ export async function tgDetectChatId() {
   throw new Error('No messages found — open your bot in Telegram and send /start first');
 }
 
+// Reads the currently pinned index (if any) and returns its chunk message
+// ids plus the index message id itself, for cleanup after a new backup.
+async function getOldBackupIds(chatId) {
+  try {
+    const chat = await tgCall('getChat', { chat_id: chatId });
+    const pin = chat.pinned_message;
+    if (!pin) return [];
+    if (pin.text?.startsWith(IDX_PREFIX)) {
+      const idx = JSON.parse(pin.text.slice(IDX_PREFIX.length));
+      return [...(idx.ids || []), pin.message_id];
+    }
+    if (pin.document) return [pin.message_id]; // legacy document backup
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export async function tgBackup() {
   const { token, chatId } = cfg();
   if (!token || !chatId) throw new Error('Telegram sync not configured');
 
-  const payload = {
+  const notes = Storage.getNotes();
+  const payload = JSON.stringify({
     app: 'noty',
-    version: 1,
+    version: 2,
     savedAt: new Date().toISOString(),
-    notes: Storage.getNotes(),
+    notes,
     settings: Storage.getSettings(),
-  };
+  });
 
-  const form = new FormData();
-  form.append('chat_id', chatId);
-  form.append('document',
-    new Blob([JSON.stringify(payload)], { type: 'application/json' }),
-    'noty-backup.json');
-  form.append('disable_notification', 'true');
-  form.append('caption', `Noty backup · ${payload.notes.length} notes · ${new Date().toLocaleString()}`);
+  const encoded = b64encode(payload);
+  const parts = [];
+  for (let i = 0; i < encoded.length; i += CHUNK_SIZE) {
+    parts.push(encoded.slice(i, i + CHUNK_SIZE));
+  }
 
-  const res = await fetch(`${API}/bot${token}/sendDocument`, { method: 'POST', body: form });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.description || 'Upload failed');
-  const msg = data.result;
+  const oldIds = await getOldBackupIds(chatId);
 
-  // Pin the new backup so restore can always find the latest via getChat,
-  // then delete the previous backup message to keep the chat clean.
-  try {
-    await tgCall('pinChatMessage', {
-      chat_id: chatId, message_id: msg.message_id, disable_notification: true,
+  const ids = [];
+  for (let i = 0; i < parts.length; i++) {
+    const m = await tgCall('sendMessage', {
+      chat_id: chatId,
+      text: `${CHUNK_PREFIX}${i + 1}/${parts.length}::${parts[i]}`,
+      disable_notification: true,
     });
-    const prevId = Storage.getSetting('tgLastMsgId', '');
-    if (prevId && Number(prevId) !== msg.message_id) {
-      tgCall('deleteMessage', { chat_id: chatId, message_id: Number(prevId) }).catch(() => {});
-    }
-  } catch { /* pinning is best-effort */ }
+    ids.push(m.message_id);
+  }
 
-  Storage.setSetting('tgLastMsgId', String(msg.message_id));
-  Storage.setSetting('tgLastBackupAt', payload.savedAt);
-  return payload.notes.length;
+  const savedAt = new Date().toISOString();
+  const idxMsg = await tgCall('sendMessage', {
+    chat_id: chatId,
+    text: IDX_PREFIX + JSON.stringify({ v: 2, ids, notes: notes.length, savedAt }),
+    disable_notification: true,
+  });
+  await tgCall('pinChatMessage', {
+    chat_id: chatId, message_id: idxMsg.message_id, disable_notification: true,
+  });
+
+  // Clean up the previous backup's messages
+  for (const id of oldIds) {
+    tgCall('deleteMessage', { chat_id: chatId, message_id: id }).catch(() => {});
+  }
+
+  Storage.setSetting('tgLastBackupAt', savedAt);
+  return notes.length;
 }
 
 export async function tgRestore() {
@@ -98,14 +155,30 @@ export async function tgRestore() {
   if (!token || !chatId) throw new Error('Telegram sync not configured');
 
   const chat = await tgCall('getChat', { chat_id: chatId });
-  const doc = chat.pinned_message?.document;
-  if (!doc) throw new Error('No pinned backup found — run a backup first');
+  const pin = chat.pinned_message;
+  if (!pin) throw new Error('No backup found — run a backup first');
+  if (pin.document) {
+    throw new Error('Old backup format — click "Backup now" once on the device that has your notes, then retry');
+  }
+  if (!pin.text?.startsWith(IDX_PREFIX)) {
+    throw new Error('No Noty backup found — run a backup first');
+  }
 
-  const file = await tgCall('getFile', { file_id: doc.file_id });
-  const res = await fetch(`${API}/file/bot${token}/${file.file_path}`);
-  if (!res.ok) throw new Error('Backup download failed');
-  const data = await res.json();
-  if (data.app !== 'noty' || !Array.isArray(data.notes)) throw new Error('Invalid backup file');
+  const idx = JSON.parse(pin.text.slice(IDX_PREFIX.length));
+  let encoded = '';
+  for (const id of idx.ids) {
+    const fwd = await tgCall('forwardMessage', {
+      chat_id: chatId, from_chat_id: chatId, message_id: id, disable_notification: true,
+    });
+    tgCall('deleteMessage', { chat_id: chatId, message_id: fwd.message_id }).catch(() => {});
+    const t = fwd.text || '';
+    if (!t.startsWith(CHUNK_PREFIX)) throw new Error('Backup chunk missing — run a fresh backup');
+    const sep = t.indexOf('::', CHUNK_PREFIX.length);
+    encoded += t.slice(sep + 2);
+  }
+
+  const data = JSON.parse(b64decode(encoded));
+  if (data.app !== 'noty' || !Array.isArray(data.notes)) throw new Error('Invalid backup data');
 
   Storage.saveNotes(data.notes);
   if (data.settings) {
@@ -115,7 +188,6 @@ export async function tgRestore() {
       ...data.settings,
       tgToken: cur.tgToken,
       tgChatId: cur.tgChatId,
-      tgLastMsgId: cur.tgLastMsgId,
     });
   }
   return { notes: data.notes.length, savedAt: data.savedAt };

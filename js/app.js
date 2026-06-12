@@ -1723,7 +1723,7 @@ window.tgShowHelp = function() {
       <li>Turn on <strong style="color:var(--text)">Auto-backup</strong> — done</li>
     </ol>
     <p style="color:var(--text-dim);font-size:12px;line-height:1.6;margin-bottom:16px">
-      Backups are JSON files sent to your private chat with the bot and pinned.
+      Backups are stored as pinned messages in your private chat with the bot.
       To restore on a new device: enter the same token + chat ID and click Restore.
       Keep the token private — anyone who has it can read your backups.
     </p>

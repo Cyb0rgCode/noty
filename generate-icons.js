@@ -1,7 +1,7 @@
 /**
- * Generates app icons — aurora mesh gradient background, anti-aliased "N"
- * with gradient fill, drop shadow, soft glow, and glossy sheen.
- * Full-bleed square: iOS masks its own corners; the sidebar rounds via CSS.
+ * Generates app icons — minimal: small black "N" centered on white,
+ * anti-aliased edges. Full-bleed square: iOS masks its own corners;
+ * the sidebar rounds via CSS.
  */
 const zlib = require('zlib');
 const fs   = require('fs');
@@ -27,12 +27,12 @@ function chunk(type, data) {
 }
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-function lerp(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
 
-// Distance from pixel (px,py) to the N glyph — 0 inside, positive outside
+// Distance from pixel (px,py) to the N glyph — 0 inside, positive outside.
+// pad controls glyph size (bigger pad = smaller N).
 function distToN(px, py, size) {
-  const pad   = size * 0.22;
-  const thick = size * 0.15;
+  const pad   = size * 0.30;
+  const thick = size * 0.105;
   const top   = pad, bot = size - pad;
   const left  = pad, right = size - pad;
 
@@ -53,93 +53,22 @@ function distToN(px, py, size) {
   return Math.min(dLeft, dRight, dDiag);
 }
 
-// Aurora blob: additive radial color contribution
-function blob(x, y, cx, cy, radius, strength) {
-  const d = Math.hypot(x - cx, y - cy) / radius;
-  const f = Math.max(0, 1 - d * d);
-  return f * f * strength;
-}
-
 function makePNG(size) {
   const pixels = new Uint8Array(size * size * 4);
-  const aa = Math.max(1, size / 180);          // anti-alias width
-  const shadowOff  = size * 0.022;
-  const shadowSoft = size * 0.04;
-  const glowRadius = size * 0.05;
-
-  // Diagonal gradient stops — monochrome
-  const c0 = [0x08, 0x08, 0x08]; // near black
-  const c1 = [0x26, 0x26, 0x26]; // dark gray
-  const c2 = [0x3c, 0x3c, 0x3c]; // mid gray
+  const aa = Math.max(1, size / 180); // anti-alias width
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const idx = (y * size + x) * 4;
 
-      // ── Base: diagonal three-stop gradient ────────────────────────
-      const td = (x + y) / (2 * size);
-      let r, g, b;
-      if (td < 0.5) {
-        r = lerp(c0[0], c1[0], td * 2);
-        g = lerp(c0[1], c1[1], td * 2);
-        b = lerp(c0[2], c1[2], td * 2);
-      } else {
-        r = lerp(c1[0], c2[0], (td - 0.5) * 2);
-        g = lerp(c1[1], c2[1], (td - 0.5) * 2);
-        b = lerp(c1[2], c2[2], (td - 0.5) * 2);
-      }
-
-      // ── Aurora blobs (mesh-gradient feel) — grayscale ──────────────
-      const b1 = blob(x, y, size * 0.78, size * 0.15, size * 0.60, 0.50); // light gray, upper-right
-      r = lerp(r, 0x6e, b1); g = lerp(g, 0x6e, b1); b = lerp(b, 0x6e, b1);
-
-      const b2 = blob(x, y, size * 0.12, size * 0.88, size * 0.65, 0.40); // soft gray, lower-left
-      r = lerp(r, 0x4a, b2); g = lerp(g, 0x4a, b2); b = lerp(b, 0x4a, b2);
-
-      const b3 = blob(x, y, size * 0.88, size * 0.92, size * 0.55, 0.35); // pale gray, lower-right
-      r = lerp(r, 0x80, b3); g = lerp(g, 0x80, b3); b = lerp(b, 0x80, b3);
-
-      // ── Vignette: darken corners for depth ─────────────────────────
-      const vd = Math.hypot(x - size / 2, y - size / 2) / (size * 0.72);
-      const vig = 1 - clamp(vd * vd, 0, 1) * 0.22;
-      r *= vig; g *= vig; b *= vig;
-
-      // ── Glossy sheen on top half ───────────────────────────────────
-      if (y < size * 0.45) {
-        const sheen = Math.pow(1 - y / (size * 0.45), 2) * 0.07;
-        r += sheen * 255; g += sheen * 255; b += sheen * 255;
-      }
-
-      // ── Drop shadow under glyph (offset down-right) ────────────────
-      const sDist = distToN(x - shadowOff, y - shadowOff, size);
-      const sCov  = clamp(1 - sDist / shadowSoft, 0, 1);
-      const shade = 1 - sCov * sCov * 0.45;
-      r *= shade; g *= shade; b *= shade;
-
-      // ── Soft glow halo around glyph ────────────────────────────────
+      // White background, black glyph with anti-aliased edge
       const dist = distToN(x, y, size);
-      if (dist > 0 && dist < glowRadius) {
-        const glow = Math.pow(1 - dist / glowRadius, 2) * 0.5;
-        r = lerp(r, 255, glow * 0.6);
-        g = lerp(g, 255, glow * 0.6);
-        b = lerp(b, 255, glow * 0.6);
-      }
-
-      // ── Glyph: anti-aliased, vertical gradient white → light gray ──
       const cov = clamp(1 - dist / aa, 0, 1);
-      if (cov > 0) {
-        const gy = clamp((y - size * 0.22) / (size * 0.56), 0, 1);
-        const gr = lerp(255, 0xd4, gy);
-        const gg = lerp(255, 0xd4, gy);
-        const gb = lerp(255, 0xd4, gy);
-        r = lerp(r, gr, cov);
-        g = lerp(g, gg, cov);
-        b = lerp(b, gb, cov);
-      }
+      const v = Math.round(255 * (1 - cov));
 
-      pixels[idx]   = Math.round(clamp(r, 0, 255));
-      pixels[idx+1] = Math.round(clamp(g, 0, 255));
-      pixels[idx+2] = Math.round(clamp(b, 0, 255));
+      pixels[idx]   = v;
+      pixels[idx+1] = v;
+      pixels[idx+2] = v;
       pixels[idx+3] = 255;
     }
   }
