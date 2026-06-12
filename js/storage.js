@@ -1,6 +1,7 @@
 const KEYS = {
   notes: 'noty_notes',
   settings: 'noty_settings',
+  tombstones: 'noty_tombstones',
 };
 
 export const Storage = {
@@ -22,6 +23,21 @@ export const Storage = {
   },
   deleteNote(id) {
     this.saveNotes(this.getNotes().filter(n => n.id !== id));
+    this.addTombstone(id);
+  },
+  getTombstones() {
+    return JSON.parse(localStorage.getItem(KEYS.tombstones) || '[]');
+  },
+  addTombstone(id) {
+    const ts = this.getTombstones().filter(t => t.id !== id);
+    ts.push({ id, deletedAt: new Date().toISOString() });
+    localStorage.setItem(KEYS.tombstones, JSON.stringify(ts));
+  },
+  saveTombstones(ts) {
+    localStorage.setItem(KEYS.tombstones, JSON.stringify(ts));
+  },
+  clearTombstones() {
+    localStorage.removeItem(KEYS.tombstones);
   },
   getSettings() {
     return JSON.parse(localStorage.getItem(KEYS.settings) || '{}');

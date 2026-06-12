@@ -1,27 +1,28 @@
-// ── Telegram Bot Sync ────────────────────────────────────────────────────
-// Free cloud backup using the user's own Telegram bot. The Bot API method
-// endpoints allow CORS requests from browsers, so a static site can call
-// them directly. The file-download endpoint does NOT send CORS headers,
-// so backups are stored as TEXT messages instead of documents:
+// ── Telegram Multi-Device Merge Sync ────────────────────────────────────
+// Free N-device sync using the user's own Telegram bot. Bot API method
+// endpoints allow browser CORS; file downloads do NOT — all data travels
+// as text message bodies, never as file downloads.
 //
-// Backup:  data JSON → base64 → ≤3800-char chunks → sendMessage each →
-//          send an index message listing the chunk ids → pin the index.
-// Restore: getChat → pinned index → forwardMessage each chunk to the same
-//          chat (the response contains the text) → delete the forwarded
-//          copies → reassemble → import.
+// Backup:  local notes + tombstones → base64 chunks → sendMessage each →
+//          pinned index message.
+// Sync:    pull remote → merge with local (newest updatedAt wins per note,
+//          tombstones applied) → save merged locally → push merged back →
+//          all devices always converge to the same state.
 //
-// Every step is a Bot API method call, so the whole flow is CORS-safe.
+// Tombstones prevent deleted notes from re-appearing on other devices.
+// A tombstone is only applied if deletedAt > note.updatedAt — an edit
+// after a deletion on another device saves the note.
 
 import { Storage } from './storage.js';
 
-const API = 'https://api.telegram.org';
-const IDX_PREFIX = 'NOTY_INDEX::';
+const API          = 'https://api.telegram.org';
+const IDX_PREFIX   = 'NOTY_INDEX::';
 const CHUNK_PREFIX = 'NOTY_DATA::';
-const CHUNK_SIZE = 3800; // Telegram message limit is 4096 chars
+const CHUNK_SIZE   = 3800;
 
 function cfg() {
   return {
-    token: String(Storage.getSetting('tgToken', '')).trim(),
+    token:  String(Storage.getSetting('tgToken',  '')).trim(),
     chatId: String(Storage.getSetting('tgChatId', '')).trim(),
   };
 }
@@ -48,14 +49,12 @@ async function tgCall(method, params) {
   return data.result;
 }
 
-// Unicode-safe base64 — Telegram trims whitespace at message edges, so the
-// payload must never start or end a chunk with trimmable characters.
+// Unicode-safe base64 (Telegram may trim whitespace at message edges)
 function b64encode(str) {
   const bytes = new TextEncoder().encode(str);
   let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
+  for (let i = 0; i < bytes.length; i += 0x8000)
     bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
   return btoa(bin);
 }
 
@@ -66,13 +65,8 @@ function b64decode(b64) {
   return new TextDecoder().decode(bytes);
 }
 
-// Verifies the token and returns bot info (also used as a connection test)
-export function tgGetMe() {
-  return tgCall('getMe');
-}
+export function tgGetMe() { return tgCall('getMe'); }
 
-// Finds the chat id from the most recent message sent to the bot.
-// The user must message the bot (e.g. /start) before calling this.
 export async function tgDetectChatId() {
   const updates = await tgCall('getUpdates', { limit: 100 });
   for (let i = updates.length - 1; i >= 0; i--) {
@@ -82,44 +76,90 @@ export async function tgDetectChatId() {
   throw new Error('No messages found — open your bot in Telegram and send /start first');
 }
 
-// Reads the currently pinned index (if any) and returns its chunk message
-// ids plus the index message id itself, for cleanup after a new backup.
-async function getOldBackupIds(chatId) {
-  try {
-    const chat = await tgCall('getChat', { chat_id: chatId });
-    const pin = chat.pinned_message;
-    if (!pin) return [];
-    if (pin.text?.startsWith(IDX_PREFIX)) {
-      const idx = JSON.parse(pin.text.slice(IDX_PREFIX.length));
-      return [...(idx.ids || []), pin.message_id];
-    }
-    if (pin.document) return [pin.message_id]; // legacy document backup
-    return [];
-  } catch {
-    return [];
+// ── Merge logic ────────────────────────────────────────────────────────
+// Returns merged notes and merged tombstones.
+function mergeData(localNotes, localTombstones, remoteNotes, remoteTombstones) {
+  // Union tombstones: keep all, prefer newest deletedAt per id
+  const tombMap = new Map();
+  for (const t of [...localTombstones, ...remoteTombstones]) {
+    const existing = tombMap.get(t.id);
+    if (!existing || t.deletedAt > existing.deletedAt) tombMap.set(t.id, t);
   }
-}
+  // Prune tombstones older than 60 days to keep payload small
+  const cutoff = new Date(Date.now() - 60 * 86400_000).toISOString();
+  const tombstones = [...tombMap.values()].filter(t => t.deletedAt > cutoff);
 
-export async function tgBackup() {
-  const { token, chatId } = cfg();
-  if (!token || !chatId) throw new Error('Telegram sync not configured');
+  // Union notes: per id keep newest updatedAt
+  const noteMap = new Map();
+  for (const n of [...localNotes, ...remoteNotes]) {
+    const existing = noteMap.get(n.id);
+    if (!existing || (n.updatedAt || '') > (existing.updatedAt || '')) noteMap.set(n.id, n);
+  }
 
-  const notes = Storage.getNotes();
-  const payload = JSON.stringify({
-    app: 'noty',
-    version: 2,
-    savedAt: new Date().toISOString(),
-    notes,
-    settings: Storage.getSettings(),
+  // Apply tombstones: delete note only if deletedAt is newer than updatedAt
+  const tombByIdMap = new Map(tombstones.map(t => [t.id, t]));
+  const notes = [...noteMap.values()].filter(n => {
+    const t = tombByIdMap.get(n.id);
+    return !t || (n.updatedAt || '') > t.deletedAt;
   });
 
-  const encoded = b64encode(payload);
-  const parts = [];
-  for (let i = 0; i < encoded.length; i += CHUNK_SIZE) {
-    parts.push(encoded.slice(i, i + CHUNK_SIZE));
+  // Sort newest first (matches original list order)
+  notes.sort((a, b) => (b.updatedAt || '') > (a.updatedAt || '') ? 1 : -1);
+
+  return { notes, tombstones };
+}
+
+// ── Read remote backup ─────────────────────────────────────────────────
+async function readRemote() {
+  const { chatId } = cfg();
+  const chat = await tgCall('getChat', { chat_id: chatId });
+  const pin  = chat.pinned_message;
+
+  if (!pin) return null;
+  if (pin.document) throw new Error(
+    'Old backup format — on a device that has your notes, click "Sync now" once, then retry here'
+  );
+  if (!pin.text?.startsWith(IDX_PREFIX)) return null;
+
+  const idx = JSON.parse(pin.text.slice(IDX_PREFIX.length));
+  let encoded = '';
+  for (const id of idx.ids) {
+    const fwd = await tgCall('forwardMessage', {
+      chat_id: chatId, from_chat_id: chatId, message_id: id, disable_notification: true,
+    });
+    // Delete the forwarded copy immediately — it's just a transport vehicle
+    tgCall('deleteMessage', { chat_id: chatId, message_id: fwd.message_id }).catch(() => {});
+    const t = fwd.text || '';
+    if (!t.startsWith(CHUNK_PREFIX)) throw new Error('Backup chunk missing — run Sync on the source device first');
+    const sep = t.indexOf('::', CHUNK_PREFIX.length);
+    encoded += t.slice(sep + 2);
   }
 
-  const oldIds = await getOldBackupIds(chatId);
+  return JSON.parse(b64decode(encoded));
+}
+
+// ── Write merged data to Telegram ─────────────────────────────────────
+async function writeRemote(notes, tombstones) {
+  const { chatId } = cfg();
+
+  // Get old message IDs before sending new ones
+  const oldIds = await (async () => {
+    try {
+      const chat = await tgCall('getChat', { chat_id: chatId });
+      const pin  = chat.pinned_message;
+      if (!pin) return [];
+      if (pin.text?.startsWith(IDX_PREFIX)) {
+        const idx = JSON.parse(pin.text.slice(IDX_PREFIX.length));
+        return [...(idx.ids || []), pin.message_id];
+      }
+      return [pin.message_id];
+    } catch { return []; }
+  })();
+
+  const payload  = JSON.stringify({ app: 'noty', version: 3, savedAt: new Date().toISOString(), notes, tombstones });
+  const encoded  = b64encode(payload);
+  const parts    = [];
+  for (let i = 0; i < encoded.length; i += CHUNK_SIZE) parts.push(encoded.slice(i, i + CHUNK_SIZE));
 
   const ids = [];
   for (let i = 0; i < parts.length; i++) {
@@ -132,84 +172,66 @@ export async function tgBackup() {
   }
 
   const savedAt = new Date().toISOString();
-  const idxMsg = await tgCall('sendMessage', {
+  const idxMsg  = await tgCall('sendMessage', {
     chat_id: chatId,
-    text: IDX_PREFIX + JSON.stringify({ v: 2, ids, notes: notes.length, savedAt }),
+    text: IDX_PREFIX + JSON.stringify({ v: 3, ids, notes: notes.length, savedAt }),
     disable_notification: true,
   });
-  await tgCall('pinChatMessage', {
-    chat_id: chatId, message_id: idxMsg.message_id, disable_notification: true,
-  });
+  await tgCall('pinChatMessage', { chat_id: chatId, message_id: idxMsg.message_id, disable_notification: true });
 
-  // Clean up the previous backup's messages
-  for (const id of oldIds) {
-    tgCall('deleteMessage', { chat_id: chatId, message_id: id }).catch(() => {});
-  }
+  for (const id of oldIds) tgCall('deleteMessage', { chat_id: chatId, message_id: id }).catch(() => {});
 
-  Storage.setSetting('tgLastBackupAt', savedAt);
-  return notes.length;
+  Storage.setSetting('tgLastSyncAt', savedAt);
+  return savedAt;
 }
 
-export async function tgRestore() {
+// ── Public: full merge sync ────────────────────────────────────────────
+// Pull remote → merge with local → save locally → push merged back.
+// Safe to call from multiple devices; all converge to the same state.
+export async function tgSync() {
   const { token, chatId } = cfg();
   if (!token || !chatId) throw new Error('Telegram sync not configured');
 
-  const chat = await tgCall('getChat', { chat_id: chatId });
-  const pin = chat.pinned_message;
-  if (!pin) throw new Error('No backup found — run a backup first');
-  if (pin.document) {
-    throw new Error('Old backup format — click "Backup now" once on the device that has your notes, then retry');
-  }
-  if (!pin.text?.startsWith(IDX_PREFIX)) {
-    throw new Error('No Noty backup found — run a backup first');
-  }
+  const localNotes      = Storage.getNotes();
+  const localTombstones = Storage.getTombstones();
 
-  const idx = JSON.parse(pin.text.slice(IDX_PREFIX.length));
-  let encoded = '';
-  for (const id of idx.ids) {
-    const fwd = await tgCall('forwardMessage', {
-      chat_id: chatId, from_chat_id: chatId, message_id: id, disable_notification: true,
-    });
-    tgCall('deleteMessage', { chat_id: chatId, message_id: fwd.message_id }).catch(() => {});
-    const t = fwd.text || '';
-    if (!t.startsWith(CHUNK_PREFIX)) throw new Error('Backup chunk missing — run a fresh backup');
-    const sep = t.indexOf('::', CHUNK_PREFIX.length);
-    encoded += t.slice(sep + 2);
-  }
+  const remote = await readRemote();
 
-  const data = JSON.parse(b64decode(encoded));
-  if (data.app !== 'noty' || !Array.isArray(data.notes)) throw new Error('Invalid backup data');
+  const remoteNotes      = remote?.notes      || [];
+  const remoteTombstones = remote?.tombstones || [];
 
-  Storage.saveNotes(data.notes);
-  if (data.settings) {
-    // Keep this device's Telegram credentials — an old backup must not wipe them
-    const cur = Storage.getSettings();
-    Storage.saveSettings({
-      ...data.settings,
-      tgToken: cur.tgToken,
-      tgChatId: cur.tgChatId,
-    });
-  }
-  return { notes: data.notes.length, savedAt: data.savedAt };
+  const { notes, tombstones } = mergeData(localNotes, localTombstones, remoteNotes, remoteTombstones);
+
+  // Save merged state locally (bypasses the auto-sync wrapper to avoid loop)
+  Storage._saveNotes(notes);
+  Storage.saveTombstones(tombstones);
+
+  await writeRemote(notes, tombstones);
+
+  return { notes: notes.length, isFirst: !remote };
 }
 
-// ── Auto-backup: debounced after note changes ───────────────────────────
+// Kept for compatibility — now just calls tgSync
+export const tgBackup  = () => tgSync().then(r => r.notes);
+export const tgRestore = () => tgSync().then(r => ({ notes: r.notes, savedAt: Storage.getSetting('tgLastSyncAt') }));
+
+// ── Auto-sync: debounced after note changes ────────────────────────────
 let tgTimer = null;
 
 export function scheduleTgBackup() {
   if (Storage.getSetting('tgAutoSync', 'false') !== 'true' || !tgConfigured()) return;
   clearTimeout(tgTimer);
   tgTimer = setTimeout(() => {
-    tgBackup()
-      .then(n => document.dispatchEvent(new CustomEvent('tg:backup-done', { detail: n })))
-      .catch(err => document.dispatchEvent(new CustomEvent('tg:backup-fail', { detail: err.message })));
+    tgSync()
+      .then(r  => document.dispatchEvent(new CustomEvent('tg:sync-done',  { detail: r })))
+      .catch(e => document.dispatchEvent(new CustomEvent('tg:sync-fail',  { detail: e.message })));
   }, 8000);
 }
 
-// Every note write goes through Storage.saveNotes, so one wrapper covers
-// create, edit, delete, import, and batch operations. saveSettings is NOT
-// wrapped — tgBackup itself writes settings and would loop.
+// Wraps Storage.saveNotes once so every note write triggers a debounced sync.
+// Also exposes Storage._saveNotes so tgSync can write locally without looping.
 export function initTgAutoSync() {
   const orig = Storage.saveNotes.bind(Storage);
-  Storage.saveNotes = (notes) => { orig(notes); scheduleTgBackup(); };
+  Storage._saveNotes = orig;
+  Storage.saveNotes  = (notes) => { orig(notes); scheduleTgBackup(); };
 }

@@ -3,7 +3,7 @@ import { AI, KNOWN_LIMITS, getTodayUsage, getExhaustedToday } from './ai.js';
 import { VoiceRecorder } from './voice.js';
 import { sm2Update, getDueCards } from './sm2.js';
 import { MindMap } from './mindmap.js';
-import { tgBackup, tgRestore, tgDetectChatId, tgConfigured, initTgAutoSync } from './telegram.js';
+import { tgSync, tgDetectChatId, tgConfigured, initTgAutoSync } from './telegram.js';
 
 // ── Mobile helpers ────────────────────────────────────────────────────
 const isMobile = () => window.innerWidth <= 640;
@@ -1585,8 +1585,8 @@ function renderSettingsView() {
       <div class="settings-section">
         <h3>Telegram Sync</h3>
         <div style="font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
-          Free cloud backup to your own Telegram bot. Notes auto-save to your private chat;
-          restore them on any device.
+          Free N-device sync via your own Telegram bot. Sync merges notes from all devices —
+          no data loss, even with concurrent edits.
           <a href="#" style="color:var(--accent)" onclick="tgShowHelp();return false">Setup guide</a>
         </div>
 
@@ -1616,8 +1616,8 @@ function renderSettingsView() {
 
         <div class="setting-row">
           <div>
-            <div class="setting-label">Auto-backup</div>
-            <div class="setting-desc">Sends a backup ~8s after any note change</div>
+            <div class="setting-label">Auto-sync</div>
+            <div class="setting-desc">Merges with remote ~8s after any note change</div>
           </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="tg-auto-toggle"
@@ -1627,19 +1627,29 @@ function renderSettingsView() {
           </label>
         </div>
 
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Sync on open</div>
+            <div class="setting-desc">Merges with remote each time the app loads</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="tg-open-toggle"
+              ${Storage.getSetting('tgSyncOnOpen','false') === 'true' ? 'checked' : ''}
+              onchange="toggleTgSyncOnOpen(this.checked)">
+            <span style="font-size:13px;color:var(--text-muted)">Enabled</span>
+          </label>
+        </div>
+
         <div class="setting-row" style="border-bottom:none">
           <div>
             <div class="setting-label">Manual sync</div>
             <div class="setting-desc" id="tg-status">${
-              Storage.getSetting('tgLastBackupAt')
-                ? '✓ Last backup: ' + new Date(Storage.getSetting('tgLastBackupAt')).toLocaleString()
-                : tgConfigured() ? 'No backup yet' : 'Not configured'
+              Storage.getSetting('tgLastSyncAt')
+                ? '✓ Last sync: ' + new Date(Storage.getSetting('tgLastSyncAt')).toLocaleString()
+                : tgConfigured() ? 'Never synced' : 'Not configured'
             }</div>
           </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-success btn-sm" onclick="tgBackupNow()">↑ Backup now</button>
-            <button class="btn btn-ghost btn-sm" onclick="tgRestoreNow()">↓ Restore</button>
-          </div>
+          <button class="btn btn-success btn-sm" onclick="tgSyncNow()">⇅ Sync now</button>
         </div>
       </div>
 
@@ -1716,16 +1726,16 @@ window.tgShowHelp = function() {
     <h3>Telegram Sync setup</h3>
     <ol style="color:var(--text-muted);font-size:14px;line-height:1.9;padding-left:20px;margin-bottom:16px">
       <li>Open Telegram, search <strong style="color:var(--text)">@BotFather</strong></li>
-      <li>Send <code>/newbot</code> and follow the steps — you get a <strong style="color:var(--text)">bot token</strong></li>
-      <li>Paste the token here in Settings</li>
-      <li>Open your new bot in Telegram and send it <code>/start</code></li>
-      <li>Click <strong style="color:var(--text)">Detect</strong> to fill in your chat ID, then <strong style="color:var(--text)">Save</strong></li>
-      <li>Turn on <strong style="color:var(--text)">Auto-backup</strong> — done</li>
+      <li>Send <code>/newbot</code> and follow the steps — copy the <strong style="color:var(--text)">bot token</strong></li>
+      <li>Paste the token in Settings and open your new bot → send <code>/start</code></li>
+      <li>Click <strong style="color:var(--text)">Detect</strong> to fill the chat ID, then <strong style="color:var(--text)">Save</strong></li>
+      <li>Click <strong style="color:var(--text)">Sync now</strong> — done. Enable Auto-sync for continuous merging.</li>
+      <li>On other devices: same token + chat ID → Sync now. Notes merge automatically.</li>
     </ol>
     <p style="color:var(--text-dim);font-size:12px;line-height:1.6;margin-bottom:16px">
-      Backups are stored as pinned messages in your private chat with the bot.
-      To restore on a new device: enter the same token + chat ID and click Restore.
-      Keep the token private — anyone who has it can read your backups.
+      Sync merges notes from all devices — newest edit wins per note, deletions tracked with
+      timestamps so they don't reappear. Data stored as pinned messages in your private bot chat.
+      Keep the token private.
     </p>
     <div style="display:flex;justify-content:flex-end">
       <button class="btn btn-primary" onclick="closeModal()">Got it</button>
@@ -1734,9 +1744,9 @@ window.tgShowHelp = function() {
 };
 
 window.saveTgConfig = function() {
-  const token = document.getElementById('tg-token-input')?.value?.trim() || '';
+  const token  = document.getElementById('tg-token-input')?.value?.trim() || '';
   const chatId = document.getElementById('tg-chat-input')?.value?.trim() || '';
-  Storage.setSetting('tgToken', token);
+  Storage.setSetting('tgToken',  token);
   Storage.setSetting('tgChatId', chatId);
   toast(token && chatId ? 'Telegram sync configured' : 'Telegram settings saved', 'success');
   renderView();
@@ -1751,68 +1761,48 @@ window.tgDetect = async function() {
     const id = await tgDetectChatId();
     document.getElementById('tg-chat-input').value = id;
     Storage.setSetting('tgChatId', String(id));
-    toast('Chat ID detected — sync ready', 'success');
-    renderView();
+    toast('Chat ID detected — click Save', 'success');
   } catch (err) {
     toast(err.message, 'error', 5000);
   }
 };
 
 window.toggleTgAuto = function(on) {
+  if (on && !tgConfigured()) { toast('Set bot token + chat ID first', 'error'); return; }
   Storage.setSetting('tgAutoSync', on ? 'true' : 'false');
-  if (on && !tgConfigured()) {
-    toast('Set bot token + chat ID first', 'error');
-    return;
-  }
-  toast(on ? 'Auto-backup on' : 'Auto-backup off', 'info');
+  toast(on ? 'Auto-sync on' : 'Auto-sync off', 'info');
 };
 
-window.tgBackupNow = async function() {
+window.toggleTgSyncOnOpen = function(on) {
+  if (on && !tgConfigured()) { toast('Set bot token + chat ID first', 'error'); return; }
+  Storage.setSetting('tgSyncOnOpen', on ? 'true' : 'false');
+  toast(on ? 'Sync on open enabled' : 'Sync on open disabled', 'info');
+};
+
+window.tgSyncNow = async function() {
   if (!tgConfigured()) { toast('Set bot token + chat ID first', 'error'); return; }
-  toast('Backing up to Telegram…', 'info');
+  toast('Syncing with Telegram…', 'info');
   try {
-    const n = await tgBackup();
-    toast(`✓ Backed up ${n} notes to Telegram`, 'success');
+    const { notes, isFirst } = await tgSync();
+    toast(isFirst ? `✓ Uploaded ${notes} notes (first sync)` : `✓ Synced — ${notes} notes`, 'success');
     renderView();
+    navigateTo(state.view); // refresh current view to show merged notes
   } catch (err) {
-    toast('Backup failed: ' + err.message, 'error', 5000);
+    toast('Sync failed: ' + err.message, 'error', 5000);
   }
 };
 
-window.tgRestoreNow = function() {
-  if (!tgConfigured()) { toast('Set bot token + chat ID first', 'error'); return; }
-  showModal(`
-    <h3>Restore from Telegram?</h3>
-    <p style="color:var(--text-muted);margin-bottom:20px">
-      This replaces all notes on this device with the latest Telegram backup.
-    </p>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmTgRestore()">Restore</button>
-    </div>
-  `);
-};
-
-window.confirmTgRestore = async function() {
-  closeModal();
-  toast('Restoring from Telegram…', 'info');
-  try {
-    const { notes, savedAt } = await tgRestore();
-    toast(`✓ Restored ${notes} notes (backup from ${new Date(savedAt).toLocaleString()})`, 'success', 5000);
-    navigateTo('dashboard');
-  } catch (err) {
-    toast('Restore failed: ' + err.message, 'error', 5000);
-  }
-};
-
-document.addEventListener('tg:backup-done', (e) => {
-  toast(`✓ Auto-backed up ${e.detail} notes to Telegram`, 'success');
+document.addEventListener('tg:sync-done', (e) => {
+  const { notes } = e.detail;
+  toast(`✓ Auto-synced — ${notes} notes`, 'success');
   const status = document.getElementById('tg-status');
-  if (status) status.textContent = '✓ Last backup: ' + new Date().toLocaleString();
+  if (status) status.textContent = '✓ Last sync: ' + new Date().toLocaleString();
+  // Refresh the notes list silently if it's open
+  if (state.view === 'notes') renderNotesView(document.getElementById('main-content'));
 });
 
-document.addEventListener('tg:backup-fail', (e) => {
-  toast('Telegram auto-backup failed: ' + e.detail, 'error', 5000);
+document.addEventListener('tg:sync-fail', (e) => {
+  toast('Telegram auto-sync failed: ' + e.detail, 'error', 5000);
 });
 
 window.exportData = function() {
@@ -2077,3 +2067,12 @@ document.addEventListener('keydown', (e) => {
 
 initTgAutoSync();
 navigateTo('dashboard');
+
+// Sync on open — runs after first render so the UI is visible during sync
+if (Storage.getSetting('tgSyncOnOpen', 'false') === 'true' && tgConfigured()) {
+  tgSync()
+    .then(r  => {
+      document.dispatchEvent(new CustomEvent('tg:sync-done', { detail: r }));
+    })
+    .catch(e => document.dispatchEvent(new CustomEvent('tg:sync-fail', { detail: e.message })));
+}
