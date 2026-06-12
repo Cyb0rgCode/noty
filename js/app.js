@@ -817,10 +817,12 @@ window.aiAtomize = async function(id) {
   const note = Storage.getNote(id);
   if (!note?.content?.trim()) { toast('Note is empty', 'error'); return; }
 
-  showModal(`<h3>⚛ Atomizing note… ${loadingDots()}</h3><p style="color:var(--text-muted)">Breaking into focused atomic concepts…</p>`);
+  showModal(`<h3>⚛ Atomizing note… ${loadingDots()}</h3><p style="color:var(--text-muted)">Breaking into atomic concepts and finding connections…</p>`);
 
   try {
-    const atoms = await AI.atomize(note.content);
+    // Vault = notes the AI may link atoms to (exclude source note + its existing atoms)
+    const vault = Storage.getNotes().filter(n => n.id !== id && n.sourceNoteId !== id);
+    const atoms = await AI.atomize(note.content, vault);
 
     const created = atoms.map(a => ({
       id: uuid(),
@@ -829,17 +831,46 @@ window.aiAtomize = async function(id) {
       tags: [...(note.tags || [])],
       category: note.category || '',
       sourceNoteId: note.id,
+      connections: [],
       flashcards: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
 
+    // Zettelkasten wiring — bidirectional links between atoms and to vault notes
+    const vaultUpdates = new Map(); // vault note id -> Set of atom ids to connect back
+    let totalLinks = 0;
+    atoms.forEach((a, i) => {
+      for (const t of (Array.isArray(a.links) ? a.links : [])) {
+        if (!Number.isInteger(t) || t === i || !created[t]) continue;
+        if (created[i].connections.includes(created[t].id)) continue;
+        created[i].connections.push(created[t].id);
+        created[t].connections.push(created[i].id);
+        totalLinks++;
+      }
+      for (const v of (Array.isArray(a.existing) ? a.existing : [])) {
+        const target = Number.isInteger(v) ? vault[v] : null;
+        if (!target || created[i].connections.includes(target.id)) continue;
+        created[i].connections.push(target.id);
+        if (!vaultUpdates.has(target.id)) vaultUpdates.set(target.id, new Set());
+        vaultUpdates.get(target.id).add(created[i].id);
+        totalLinks++;
+      }
+    });
+
     created.forEach(n => Storage.upsertNote(n));
+    for (const [noteId, atomIds] of vaultUpdates) {
+      const t = Storage.getNote(noteId);
+      if (t) Storage.upsertNote({ ...t, connections: [...new Set([...(t.connections || []), ...atomIds])] });
+    }
     updateSidebarStats();
 
     showModal(`
       <h3>⚛ ${created.length} atomic notes created</h3>
-      <p style="color:var(--text-muted);margin-bottom:12px">From: <em>${esc(note.title || 'Untitled')}</em></p>
+      <p style="color:var(--text-muted);margin-bottom:12px">
+        From: <em>${esc(note.title || 'Untitled')}</em>
+        ${totalLinks ? ` · <span style="color:var(--accent-text)">⇆ ${totalLinks} connection${totalLinks !== 1 ? 's' : ''}</span>` : ''}
+      </p>
       <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;margin-bottom:16px">
         ${created.map(n => `
           <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2);border-radius:6px;cursor:pointer"
@@ -848,12 +879,14 @@ window.aiAtomize = async function(id) {
               <div style="font-weight:600;font-size:13px;color:var(--text)">${esc(n.title)}</div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(n.content.slice(0, 80))}…</div>
             </div>
+            ${n.connections.length ? `<span style="font-size:11px;color:var(--accent-light)">⇆ ${n.connections.length}</span>` : ''}
             <span style="font-size:11px;color:var(--accent)">Open →</span>
           </div>
         `).join('')}
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+        <button class="btn btn-primary" onclick="closeModal();navigateTo('mindmap')">View graph →</button>
         <button class="btn btn-primary" onclick="closeModal();navigateTo('notes')">View notes →</button>
       </div>
     `);

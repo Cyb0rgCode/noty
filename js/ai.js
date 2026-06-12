@@ -70,7 +70,7 @@ async function callModel(model, prompt) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
     }),
   });
 
@@ -156,8 +156,30 @@ export const AI = {
     return raw.trim().replace(/^["'`]|["'`]$/g, '').replace(/\.$/, '');
   },
 
-  async atomize(content) {
-    const raw = await call(`Break the following note into atomic concepts. Each atom = one focused, self-contained idea (2-4 sentences max). Return ONLY a JSON array:\n[\n  {"title": "...", "content": "..."},\n  ...\n]\nAim for 3-8 atoms. No other text.\n\n${content}`);
+  async atomize(content, existingNotes = []) {
+    const vaultList = existingNotes
+      .slice(0, 60)
+      .map((n, i) => `${i}: ${n.title || 'Untitled'}`)
+      .join('\n');
+    const raw = await call(`Break the following note into atomic notes using the Zettelkasten method.
+Rules:
+- Each atom = ONE focused idea (2-4 sentences), fully self-contained and understandable without the original note
+- Title is a specific claim or concept (e.g. "Spaced repetition exploits the forgetting curve"), not a vague topic
+- "links": indices of OTHER atoms in your array that this atom directly relates to or builds on
+${vaultList ? `- "existing": indices of vault notes (listed below) this atom clearly relates to; [] if none
+
+Vault notes:
+${vaultList}` : ''}
+
+Return ONLY a JSON array:
+[
+  {"title": "...", "content": "...", "links": [1], "existing": []},
+  ...
+]
+Aim for 3-8 atoms. No other text.
+
+NOTE TO ATOMIZE:
+${content}`);
     const atoms = extractJSON(raw);
     if (!Array.isArray(atoms)) throw new Error('Could not parse atoms from AI response');
     return atoms.filter(a => a.title && a.content);
