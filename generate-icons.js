@@ -53,18 +53,21 @@ function distToN(px, py, size) {
   return Math.min(dLeft, dRight, dDiag);
 }
 
-function makePNG(size) {
+// dark=true → near-black bg (#0d0d0d), white N
+// dark=false → white bg, black N
+function makePNG(size, dark) {
   const pixels = new Uint8Array(size * size * 4);
-  const aa = Math.max(1, size / 180); // anti-alias width
+  const aa = Math.max(1, size / 180);
+
+  const bg    = dark ? 0x0d : 0xff;
+  const glyph = dark ? 0xff : 0x00;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const idx = (y * size + x) * 4;
-
-      // White background, black glyph with anti-aliased edge
+      const idx  = (y * size + x) * 4;
       const dist = distToN(x, y, size);
-      const cov = clamp(1 - dist / aa, 0, 1);
-      const v = Math.round(255 * (1 - cov));
+      const cov  = clamp(1 - dist / aa, 0, 1);
+      const v    = Math.round(bg + (glyph - bg) * cov);
 
       pixels[idx]   = v;
       pixels[idx+1] = v;
@@ -97,7 +100,10 @@ function makePNG(size) {
 
 const sizes = [180, 167, 152, 120, 512];
 for (const size of sizes) {
-  const png = makePNG(size);
-  fs.writeFileSync(`C:/Users/RayenMajoul/Desktop/Noty/icon-${size}.png`, png);
-  console.log(`Generated icon-${size}.png`);
+  // Light variants (existing)
+  fs.writeFileSync(`C:/Users/RayenMajoul/Desktop/Noty/icon-${size}.png`, makePNG(size, false));
+  console.log(`Generated icon-${size}.png (light)`);
+  // Dark variants
+  fs.writeFileSync(`C:/Users/RayenMajoul/Desktop/Noty/icon-dark-${size}.png`, makePNG(size, true));
+  console.log(`Generated icon-dark-${size}.png (dark)`);
 }
