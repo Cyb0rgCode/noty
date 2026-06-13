@@ -89,17 +89,63 @@ const state = {
 const voice = new VoiceRecorder();
 
 // ── Navigation ─────────────────────────────────────────────────────────
+const VIEW_TITLES = {
+  dashboard: 'Dashboard', notes: 'Notes', flashcards: 'Flashcards',
+  quiz: 'Quiz', mindmap: 'Mind Map', settings: 'Settings',
+};
+
+function setTopbarTitle(text) {
+  const el = document.getElementById('ob-title');
+  if (el) el.textContent = text;
+}
+
+function closeDrawer() { document.getElementById('app')?.classList.remove('drawer-open'); }
+function openDrawer()  { document.getElementById('app')?.classList.add('drawer-open'); }
+
 function navigateTo(view) {
   state.view = view;
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.view === view);
   });
+  setTopbarTitle(VIEW_TITLES[view] || view);
+  closeDrawer();
   renderView();
 }
 
 document.querySelectorAll('.nav-item').forEach(el => {
   el.addEventListener('click', () => navigateTo(el.dataset.view));
 });
+
+// ── Obsidian shell: top bar, drawer, ribbon, edge-swipe ────────────────
+document.getElementById('ob-menu-btn')?.addEventListener('click', () =>
+  document.getElementById('app')?.classList.toggle('drawer-open'));
+document.getElementById('ob-scrim')?.addEventListener('click', closeDrawer);
+document.getElementById('ob-action-btn')?.addEventListener('click', () => window.createNote());
+document.getElementById('rb-new')?.addEventListener('click', () => { closeDrawer(); window.createNote(); });
+document.getElementById('rb-search')?.addEventListener('click', () => {
+  navigateTo('notes');
+  setTimeout(() => document.getElementById('note-search')?.focus(), 60);
+});
+document.querySelectorAll('.ob-ribbon-btn[data-view]').forEach(b =>
+  b.addEventListener('click', () => navigateTo(b.dataset.view)));
+
+// Edge-swipe: drag right from the left edge to open, left to close
+let _swipeX = null, _swipeY = null;
+document.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  _swipeX = t.clientX; _swipeY = t.clientY;
+}, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (_swipeX == null) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - _swipeX, dy = t.clientY - _swipeY;
+  const open = document.getElementById('app')?.classList.contains('drawer-open');
+  if (Math.abs(dx) > 60 && Math.abs(dy) < 45) {
+    if (dx > 0 && _swipeX < 28 && !open) openDrawer();
+    else if (dx < 0 && open) closeDrawer();
+  }
+  _swipeX = _swipeY = null;
+}, { passive: true });
 
 // ── Render dispatcher ──────────────────────────────────────────────────
 function renderView() {
@@ -549,6 +595,8 @@ window.createNote = function() {
   Storage.upsertNote(note);
   state.editingNoteId = note.id;
   navigateTo('notes');
+  // Obsidian: a new note opens straight into the editor
+  if (isMobile()) openNote(note.id);
 };
 
 window.openNote = function(id) {
@@ -557,9 +605,11 @@ window.openNote = function(id) {
     // Re-render just the editor pane without full reload
     const pane = document.getElementById('note-editor-pane');
     if (pane) {
-      pane.innerHTML = renderNoteEditor(Storage.getNote(id));
+      const note = Storage.getNote(id);
+      pane.innerHTML = renderNoteEditor(note);
       bindEditorEvents();
       setMobileEditorOpen(true);
+      setTopbarTitle(note?.title || 'Untitled');
       // Update active note in list
       document.querySelectorAll('.note-list-item').forEach(el => {
         el.classList.toggle('active', el.getAttribute('onclick')?.includes(id));
@@ -573,6 +623,7 @@ window.openNote = function(id) {
 window.mobileBack = function() {
   state.editingNoteId = null;
   setMobileEditorOpen(false);
+  setTopbarTitle('Notes');
   const pane = document.getElementById('note-editor-pane');
   if (pane) pane.innerHTML = renderNoNoteSelected();
   document.querySelectorAll('.note-list-item').forEach(el => el.classList.remove('active'));

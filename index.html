@@ -19,41 +19,56 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <header id="ob-topbar">
+    <button class="ob-icon-btn" id="ob-menu-btn" aria-label="Open menu">&#9776;</button>
+    <div class="ob-title" id="ob-title">Dashboard</div>
+    <button class="ob-icon-btn" id="ob-action-btn" aria-label="New note">+</button>
+  </header>
+
   <div id="app">
+    <div id="ob-scrim"></div>
     <nav id="sidebar">
-      <div class="sidebar-header">
-        <div class="logo">
-          <img class="logo-icon" id="logo-img" src="icon-dark-120.png" alt="Noty">
-          <span class="logo-text">Noty</span>
-        </div>
+      <div class="ob-ribbon">
+        <button class="ob-ribbon-btn" id="rb-new" title="New note" aria-label="New note">+</button>
+        <button class="ob-ribbon-btn" id="rb-search" title="Search notes" aria-label="Search notes">&#128269;</button>
+        <div class="ob-ribbon-spacer"></div>
+        <button class="ob-ribbon-btn" data-view="settings" title="Settings" aria-label="Settings">&#9881;</button>
       </div>
-      <ul class="nav-links">
-        <li class="nav-item active" data-view="dashboard">
-          <span class="nav-icon">&#9783;</span>
-          <span>Dashboard</span>
-        </li>
-        <li class="nav-item" data-view="notes">
-          <span class="nav-icon">&#9998;</span>
-          <span>Notes</span>
-        </li>
-        <li class="nav-item" data-view="flashcards">
-          <span class="nav-icon">&#9889;</span>
-          <span>Flashcards</span>
-        </li>
-        <li class="nav-item" data-view="quiz">
-          <span class="nav-icon">&#10067;</span>
-          <span>Quiz</span>
-        </li>
-        <li class="nav-item" data-view="mindmap">
-          <span class="nav-icon">&#9711;</span>
-          <span>Mind Map</span>
-        </li>
-        <li class="nav-item" data-view="settings">
-          <span class="nav-icon">&#9881;</span>
-          <span>Settings</span>
-        </li>
-      </ul>
-      <div class="sidebar-footer" id="sidebar-stats"></div>
+      <div class="ob-drawer-main">
+        <div class="sidebar-header">
+          <div class="logo">
+            <img class="logo-icon" id="logo-img" src="icon-dark-120.png" alt="Noty">
+            <span class="logo-text">Noty</span>
+          </div>
+        </div>
+        <ul class="nav-links">
+          <li class="nav-item active" data-view="dashboard">
+            <span class="nav-icon">&#9783;</span>
+            <span>Dashboard</span>
+          </li>
+          <li class="nav-item" data-view="notes">
+            <span class="nav-icon">&#9998;</span>
+            <span>Notes</span>
+          </li>
+          <li class="nav-item" data-view="flashcards">
+            <span class="nav-icon">&#9889;</span>
+            <span>Flashcards</span>
+          </li>
+          <li class="nav-item" data-view="quiz">
+            <span class="nav-icon">&#10067;</span>
+            <span>Quiz</span>
+          </li>
+          <li class="nav-item" data-view="mindmap">
+            <span class="nav-icon">&#9711;</span>
+            <span>Mind Map</span>
+          </li>
+          <li class="nav-item" data-view="settings">
+            <span class="nav-icon">&#9881;</span>
+            <span>Settings</span>
+          </li>
+        </ul>
+        <div class="sidebar-footer" id="sidebar-stats"></div>
+      </div>
     </nav>
     <main id="main-content"></main>
   </div>
