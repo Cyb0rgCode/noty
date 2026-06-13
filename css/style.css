@@ -569,28 +569,31 @@ body {
 }
 
 .notes-sidebar-header {
-  padding: 16px;
+  padding: 12px 12px;
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .search-input {
   flex: 1;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 7px 10px;
+  border-radius: 20px;
+  padding: 7px 14px;
   color: var(--text);
   font-size: 13px;
   font-family: var(--font);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+
+.search-input::placeholder { color: var(--text-dim); }
 
 .search-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
 }
 
 .notes-list {
@@ -600,58 +603,70 @@ body {
 }
 
 .note-list-item {
-  padding: 12px;
-  border-radius: 8px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 7px;
   cursor: pointer;
-  transition: background 0.15s;
-  margin-bottom: 4px;
+  transition: background 0.12s, border-color 0.12s;
+  margin-bottom: 2px;
+  border-left: 2px solid transparent;
+  position: relative;
 }
 
 .note-list-item:hover {
   background: var(--panel-hover);
+  border-left-color: rgba(var(--accent-rgb), 0.35);
 }
 
 .note-list-item.active {
-  background: rgba(var(--accent-rgb), 0.2);
-  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.14);
+  border-left-color: var(--accent);
 }
 
 .note-list-title {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.note-list-item.active .note-list-title {
+  color: var(--accent-light);
 }
 
 .note-list-preview {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
+  line-height: 1.45;
 }
 
 .note-list-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
 .tag {
-  background: rgba(var(--accent-rgb), 0.2);
+  background: rgba(var(--accent-rgb), 0.14);
   color: var(--accent-text);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .note-date {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-dim);
   margin-left: auto;
 }
@@ -1549,8 +1564,8 @@ body {
   /* Hide list when editor is open on mobile */
   .mobile-editor-open .notes-sidebar { display: none; }
 
-  /* Full-width editor panel */
-  #note-editor-pane { display: block; }
+  /* Hide empty editor pane on mobile — only show when a note is open */
+  #note-editor-pane { display: none; }
   .mobile-editor-open #note-editor-pane {
     position: fixed;
     inset: 0;
@@ -1672,11 +1687,22 @@ body {
     gap: 8px;
   }
 
-  /* ── Mind map ── */
-  .mindmap-container {
-    height: calc(100dvh - 160px);
+  /* ── Mind map — full viewport canvas ── */
+  .view:has(.mindmap-container) {
+    padding: 0 !important;
   }
-
+  .view:has(.mindmap-container) .view-header {
+    padding: 10px 14px;
+    min-height: 0;
+  }
+  .view:has(.mindmap-container) .view-subtitle { display: none; }
+  .mindmap-container {
+    height: calc(100dvh - 52px - env(safe-area-inset-top) - 48px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
   .mindmap-legend { display: none; }
 
   /* ── Settings ── */
