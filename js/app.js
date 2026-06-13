@@ -1359,22 +1359,14 @@ function scoreMessage(pct) {
 // ────────────────────────────────────────────────────────────────────────
 function renderMindMapShell() {
   return `
-    <div class="view" style="padding:20px 24px">
-      <div class="view-header">
-        <div>
-          <div class="view-title">Mind Map</div>
-          <div class="view-subtitle">Visual graph of your notes and connections</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-ghost btn-sm" id="ai-links-btn" onclick="enhanceWithAI()" ${!Storage.getSetting('apiKey') ? 'disabled title="Add API key"' : ''}>
-            ✦ AI Connections
-          </button>
+    <div class="view">
+      <div class="mindmap-container">
+        <svg id="mindmap-svg"></svg>
+        <div class="mindmap-controls">
+          <button class="btn btn-ghost btn-sm" id="ai-links-btn" onclick="enhanceWithAI()" ${!Storage.getSetting('apiKey') ? 'disabled title="Add API key"' : ''}>✦ AI</button>
           <button class="btn btn-ghost btn-sm" onclick="initMindMap()">Reset</button>
           <button class="btn btn-ghost btn-sm" onclick="zoomMindMap(0)" title="Reset zoom">1:1</button>
         </div>
-      </div>
-      <div class="mindmap-container">
-        <svg id="mindmap-svg"></svg>
         <div class="mindmap-legend">
           <div>● node size = content length</div>
           <div>● edges = shared tags or AI connections</div>

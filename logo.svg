@@ -7,8 +7,7 @@
     </clipPath>
   </defs>
 
-  <!-- Black background -->
-  <rect width="512" height="512" fill="#0d0d0d"/>
+  <!-- Transparent background (no rect) -->
 
   <!-- Base medium violet -->
   <rect width="512" height="512" fill="#6b40d0" clip-path="url(#c)"/>
