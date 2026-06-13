@@ -37,7 +37,7 @@
       <div class="ob-drawer-main">
         <div class="sidebar-header">
           <div class="logo">
-            <img class="logo-icon" id="logo-img" src="icon-dark-120.png" alt="Noty">
+            <img class="logo-icon" id="logo-img" src="logo.svg" alt="Noty">
             <span class="logo-text">Noty</span>
           </div>
         </div>
@@ -83,8 +83,7 @@
       window.__applyTheme = function(pref) {
         const resolved = pref === 'system' ? (mq.matches ? 'dark' : 'light') : pref;
         document.documentElement.dataset.theme = resolved;
-        const img = document.getElementById('logo-img');
-        if (img) img.src = resolved === 'dark' ? 'icon-dark-120.png' : 'icon-120.png';
+        // logo.svg works for both themes — no swap needed
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.content = resolved === 'dark' ? '#1e1e1e' : '#f4f4f4';
       };

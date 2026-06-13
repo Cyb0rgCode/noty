@@ -211,7 +211,6 @@ function renderDashboard() {
           <div class="view-title">Dashboard</div>
           <div class="view-subtitle">${greeting()} Ready to learn?</div>
         </div>
-        <button class="btn btn-primary" onclick="createNote()">+ New Note</button>
       </div>
 
       ${!Storage.getSetting('apiKey') ? `
