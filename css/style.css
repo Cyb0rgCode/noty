@@ -1,52 +1,52 @@
 :root {
-  /* Monochrome dark — matches the app icon (white N on black) */
+  /* Obsidian dark — gray surfaces + violet accent (hsl 258 88% 66%) */
   color-scheme: dark;
-  --bg: #0d0d0d;
-  --sidebar-bg: #111111;
-  --panel: #171717;
-  --panel-hover: #222222;
-  --border: #2c2c2c;
-  --accent: #ffffff;
-  --accent-rgb: 255, 255, 255;
-  --accent-hover: #e2e2e2;
-  --accent-light: #ececec;
-  --accent-text: #f5f5f5;
-  --on-accent: #111111;
-  --text: #ececec;
-  --text-muted: #9b9b9b;
-  --text-dim: #6a6a6a;
+  --bg: #1e1e1e;
+  --sidebar-bg: #161616;
+  --panel: #262626;
+  --panel-hover: #2f2f2f;
+  --border: #393939;
+  --accent: #8b5cf6;
+  --accent-rgb: 139, 92, 246;
+  --accent-hover: #9d75f7;
+  --accent-light: #b79bff;
+  --accent-text: #b79bff;
+  --on-accent: #ffffff;
+  --text: #dadada;
+  --text-muted: #9e9e9e;
+  --text-dim: #6b6b6b;
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
   --card-radius: 14px;
-  --accent-grad: linear-gradient(135deg, #ffffff, #d4d4d4);
-  --title-grad: linear-gradient(135deg, #ffffff, #a3a3a3);
-  --sidebar-grad: linear-gradient(180deg, #131313, #0b0b0b);
+  --accent-grad: linear-gradient(135deg, #8b5cf6, #7048d6);
+  --title-grad: linear-gradient(135deg, #b79bff, #8b5cf6);
+  --sidebar-grad: linear-gradient(180deg, #171717, #131313);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.35);
   --font: 'Segoe UI', system-ui, sans-serif;
 }
 
 [data-theme="light"] {
-  /* Monochrome light — black N on white */
+  /* Obsidian light — white surfaces + violet accent */
   color-scheme: light;
-  --bg: #f5f5f5;
-  --sidebar-bg: #fbfbfb;
+  --bg: #f4f4f4;
+  --sidebar-bg: #ececec;
   --panel: #ffffff;
-  --panel-hover: #ececec;
-  --border: #dadada;
-  --accent: #111111;
-  --accent-rgb: 17, 17, 17;
-  --accent-hover: #333333;
-  --accent-light: #2a2a2a;
-  --accent-text: #111111;
+  --panel-hover: #f0f0f0;
+  --border: #e0e0e0;
+  --accent: #7c4ddb;
+  --accent-rgb: 124, 77, 219;
+  --accent-hover: #6d44d0;
+  --accent-light: #6d44d0;
+  --accent-text: #6d44d0;
   --on-accent: #ffffff;
-  --text: #1a1a1a;
-  --text-muted: #555555;
+  --text: #1f1f1f;
+  --text-muted: #5c5c5c;
   --text-dim: #8a8a8a;
-  --accent-grad: linear-gradient(135deg, #2b2b2b, #000000);
-  --title-grad: linear-gradient(135deg, #000000, #4d4d4d);
-  --sidebar-grad: linear-gradient(180deg, #fdfdfd, #f2f2f2);
+  --accent-grad: linear-gradient(135deg, #8b5cf6, #6d44d0);
+  --title-grad: linear-gradient(135deg, #7c4ddb, #5a32b8);
+  --sidebar-grad: linear-gradient(180deg, #efefef, #e8e8e8);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.07);
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.12);
 }
@@ -86,13 +86,13 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(13, 13, 13, 0.85);
+  background: rgba(22, 22, 22, 0.85);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--border);
   z-index: 250;
 }
-[data-theme="light"] #ob-topbar { background: rgba(245, 245, 245, 0.85); }
+[data-theme="light"] #ob-topbar { background: rgba(236, 236, 236, 0.85); }
 
 .ob-icon-btn {
   width: 40px;
@@ -1206,7 +1206,7 @@ body {
   position: absolute;
   bottom: 16px;
   left: 16px;
-  background: rgba(13, 13, 13, 0.9);
+  background: rgba(30, 30, 30, 0.9);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 14px;
@@ -1292,7 +1292,7 @@ body {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: rgba(23, 23, 23, 0.92);
+  background: rgba(38, 38, 38, 0.92);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
