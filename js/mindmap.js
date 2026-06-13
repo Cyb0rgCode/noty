@@ -262,7 +262,6 @@ export class MindMap {
   _bindDrag() {
     const svgMove = (clientX, clientY) => {
       const rect = this.svg.getBoundingClientRect();
-      // Convert screen coords to node-space coords (undo translate+scale)
       return {
         x: (clientX - rect.left - this.tx) / this.scale,
         y: (clientY - rect.top  - this.ty) / this.scale,
@@ -286,14 +285,13 @@ export class MindMap {
       }
     };
 
-    // Pan starts on SVG background mousedown (not on a node)
+    // Mouse pan on SVG background
     this.svg.addEventListener('mousedown', (e) => {
       if (e.target === this.svg || e.target.tagName === 'g' && e.target === this.svg.lastChild) {
         this._panning = true;
         this._panStart = { x: e.clientX, y: e.clientY };
       }
     });
-
     document.addEventListener('mousemove', (e) => move(e.clientX, e.clientY));
     document.addEventListener('mouseup', () => {
       this.dragging = null;
@@ -301,17 +299,71 @@ export class MindMap {
       this._panStart = null;
     });
 
+    // Touch: pan (1 finger on bg) + node drag (1 finger on node) + pinch-zoom (2 fingers)
+    this._pinchDist = null;
+    this._pinchMid  = null;
+
+    // Nodes call stopPropagation on touchstart, so this only fires on background touches
+    this.svg.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        this.dragging = null;
+        this._panning = false;
+        const t0 = e.touches[0], t1 = e.touches[1];
+        this._pinchDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        this._pinchMid  = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+      } else if (e.touches.length === 1 && !this.dragging) {
+        this._panning   = true;
+        this._panStart  = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        this._pinchDist = null;
+      }
+    }, { passive: true });
+
     document.addEventListener('touchmove', (e) => {
-      if (!this.dragging) return;
-      e.preventDefault();
-      move(e.touches[0].clientX, e.touches[0].clientY);
+      if (e.touches.length === 2 && this._pinchDist !== null) {
+        e.preventDefault();
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const newDist  = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const newMid   = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+        const rect     = this.svg.getBoundingClientRect();
+        const mx       = newMid.x - rect.left;
+        const my       = newMid.y - rect.top;
+        const newScale = Math.max(0.2, Math.min(4, this.scale * (newDist / this._pinchDist)));
+        this.tx = mx - (mx - this.tx) * (newScale / this.scale) + (newMid.x - this._pinchMid.x);
+        this.ty = my - (my - this.ty) * (newScale / this.scale) + (newMid.y - this._pinchMid.y);
+        this.scale      = newScale;
+        this._pinchDist = newDist;
+        this._pinchMid  = newMid;
+        this._render();
+      } else if (e.touches.length === 1) {
+        const cx = e.touches[0].clientX;
+        const cy = e.touches[0].clientY;
+        if (this.dragging) {
+          e.preventDefault();
+          this._wasDragging = true;
+          const pos = svgMove(cx, cy);
+          this.dragging.x = pos.x;
+          this.dragging.y = pos.y;
+          this.dragging.vx = 0;
+          this.dragging.vy = 0;
+          this._render();
+        } else if (this._panning && this._panStart) {
+          e.preventDefault();
+          this.tx += cx - this._panStart.x;
+          this.ty += cy - this._panStart.y;
+          this._panStart = { x: cx, y: cy };
+          this._render();
+        }
+      }
     }, { passive: false });
 
     document.addEventListener('touchend', (e) => {
-      if (this.dragging && !this._wasDragging) {
-        this.onNodeClick?.(this.dragging.id);
+      if (e.touches.length < 2) { this._pinchDist = null; this._pinchMid = null; }
+      if (e.touches.length === 0) {
+        if (this.dragging && !this._wasDragging) this.onNodeClick?.(this.dragging.id);
+        this.dragging  = null;
+        this._panning  = false;
+        this._panStart = null;
       }
-      this.dragging = null;
     });
   }
 
